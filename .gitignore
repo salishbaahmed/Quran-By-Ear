@@ -1,0 +1,31 @@
+# Node
+node_modules/
+dist/
+build/
+.env
+
+# Server
+server/database.sqlite
+server/temp/
+backend/database.sqlite
+backend/temp/
+
+# Android / Gradle
+.gradle/
+*.iml
+local.properties
+.idea/
+.DS_Store
+Thumbs.db
+build/
+app/build/
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+
+# Frontend / Vite
+phone/frontend/dist/
+frontend/dist/
+.figma/

@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-arabic: 'Amiri', Georgia, serif;
+}
+
+:root {
+  --bg-color: #f8fafc;
+  --bg-image: url('/splash-bg-light.png');
+  --bg: transparent;
+  --surface: rgba(255, 255, 255, 0.75);
+  --surface-2: rgba(255, 255, 255, 0.4);
+  --fg: #0f2117;
+  --fg-muted: #4b6354;
+  --border: rgba(15, 33, 23, 0.12);
+  --accent: #b8860b;
+  --accent-soft: rgba(184, 134, 11, 0.12);
+  --accent-fg: #ffffff;
+  --accent-dark: #8b6508;
+  --error: #dc2626;
+  --error-soft: rgba(220, 38, 38, 0.1);
+  --overlay-gradient: linear-gradient(to bottom, rgba(248,250,252,0.3) 0%, rgba(248,250,252,0.6) 50%, rgba(248,250,252,0.9) 100%);
+}
+
+.dark {
+  --bg-color: #0d1b2a;
+  --bg-image: url('/splash-bg-light.png');
+  --bg: transparent;
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface-2: rgba(255, 255, 255, 0.12);
+  --fg: #ffffff;
+  --fg-muted: rgba(255, 255, 255, 0.65);
+  --border: rgba(255, 255, 255, 0.15);
+  --accent: #d4a84b;
+  --accent-soft: rgba(212, 168, 75, 0.15);
+  --accent-fg: #0d1b2a;
+  --accent-dark: #b88a38;
+  --error: #ef4444;
+  --error-soft: rgba(239, 68, 68, 0.15);
+  --overlay-gradient: linear-gradient(to bottom, rgba(13,27,42,0.75) 0%, rgba(13,27,42,0.85) 50%, rgba(13,27,42,0.95) 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+#root {
+  height: 100%;
+}
+
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.scrollbar-thin:hover::-webkit-scrollbar-thumb {
+  background: var(--fg-muted);
+}
