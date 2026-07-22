@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScreenState } from '../types';
 import { Header } from '../components/Header';
-import { getApiBaseUrl, setApiBaseUrl, clearToken, DEFAULT_API_BASE_URL } from '../lib/api';
+import { getApiBaseUrl, setApiBaseUrl, clearToken, DEFAULT_API_BASE_URL, getToken } from '../lib/api';
 import { Server, Save, LogOut, RotateCcw, ShieldAlert } from 'lucide-react';
 
 interface SettingsScreenProps {
@@ -41,7 +41,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
         subtitle="App configuration & account"
         onNavigate={onNavigate}
         showBack={true}
-        onBack={() => onNavigate('surah-list')}
+        onBack={() => {
+          if (getToken()) {
+            onNavigate('surah-list');
+          } else {
+            onNavigate('login');
+          }
+        }}
       />
 
       <main className="flex-1 px-4 pt-4 max-w-md mx-auto w-full space-y-6">

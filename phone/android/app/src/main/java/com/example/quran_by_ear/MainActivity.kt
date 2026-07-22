@@ -30,13 +30,15 @@ class MainActivity : ComponentActivity() {
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                 settings.allowFileAccess = true
                 settings.allowContentAccess = true
+                settings.allowFileAccessFromFileURLs = true
+                settings.allowUniversalAccessFromFileURLs = true
                 
                 // Add JavaScript Interface Bridge
                 addJavascriptInterface(AndroidBridge(context), "AndroidBridge")
                 
                 webViewClient = WebViewClient()
-                // Load frontend via mDNS for local testing across devices
-                loadUrl("http://DESKTOP-85K359Q.local:5173")
+                // Load bundled frontend from internal assets
+                loadUrl("file:///android_asset/index.html")
               }
             }
           )

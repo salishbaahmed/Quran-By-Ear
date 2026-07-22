@@ -53,7 +53,16 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigate, showToas
           <span>Back to Login</span>
         </button>
 
-        <div className="flex justify-center mb-4">
+        <div className="absolute top-6 right-6">
+          <button
+            onClick={() => onNavigate('settings')}
+            className="p-2 rounded-full bg-surface-2 border border-border text-fg-muted hover:text-fg hover:bg-surface-3 transition-colors active-scale"
+            aria-label="Settings"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div className="flex justify-center mb-4 mt-8">
           <div className="w-16 h-16 rounded-2xl bg-accent-light flex items-center justify-center border border-accent/30 shadow-lg">
             <UserPlus className="w-8 h-8 text-accent" />
           </div>
