@@ -4,7 +4,7 @@ import { Header } from '../components/Header';
 import { getDownloadedFiles, getAllStats, getFileUrl } from '../lib/androidBridge';
 import { parseDownloadFilename } from '../lib/filenameParser';
 import { getSurahByNumber } from '../data/quranData';
-import { Play, Music, Headphones, Clock, RefreshCw, FolderOpen } from 'lucide-react';
+import { Play, Music, Headphones, Clock, RefreshCw, FolderOpen, Trash2 } from 'lucide-react';
 
 interface LibraryScreenProps {
   currentScreen: ScreenState;
@@ -84,8 +84,22 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
     });
   };
 
+  const handleDelete = (e: React.MouseEvent, filename: string) => {
+    e.stopPropagation(); // prevent playing when clicking delete
+    // dynamic import of deleteAudio to avoid circular deps if any, or just import it at top
+    import('../lib/androidBridge').then(({ deleteAudio }) => {
+      deleteAudio(filename);
+      // Stop playing if deleting current playing item
+      if (currentPlaying?.filename === filename) {
+        onPlayItem(null as any);
+      }
+      // Refresh list
+      refreshLibraryData();
+    });
+  };
+
   return (
-    <div className="min-h-screen bg-bg flex flex-col pb-28">
+    <div className="min-h-screen flex flex-col pb-28">
       <Header
         title="My Downloads"
         subtitle="Offline Quran Recitations"
@@ -193,16 +207,25 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                       </div>
                     </div>
 
-                    <button
-                      className={`p-2.5 rounded-xl border shrink-0 ${
-                        isCurrent
-                          ? 'bg-accent text-slate-950 border-accent'
-                          : 'bg-surface-2 text-fg border-border hover:bg-surface-2/80'
-                      }`}
-                      aria-label="Play file"
-                    >
-                      <Play className="w-4 h-4 fill-current ml-0.5" />
-                    </button>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        className={`p-2.5 rounded-xl border ${
+                          isCurrent
+                            ? 'bg-accent text-slate-950 border-accent'
+                            : 'bg-surface-2 text-fg border-border hover:bg-surface-2/80'
+                        }`}
+                        aria-label="Play file"
+                      >
+                        <Play className="w-4 h-4 fill-current ml-0.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(e, item.filename)}
+                        className="p-2.5 rounded-xl border bg-surface-2 text-red-400 border-border hover:bg-red-950/40 hover:border-red-900/60 active-scale"
+                        aria-label="Delete file"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

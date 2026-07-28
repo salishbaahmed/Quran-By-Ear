@@ -27,7 +27,7 @@ export const SurahListScreen: React.FC<SurahListScreenProps> = ({
   });
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col pb-24">
+    <div className="min-h-screen flex flex-col pb-24">
       <Header
         title="Quran-By-Ear"
         subtitle="Select a Surah to download"

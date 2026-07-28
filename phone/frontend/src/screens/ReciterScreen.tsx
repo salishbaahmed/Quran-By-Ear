@@ -60,7 +60,7 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
   );
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col pb-24">
+    <div className="min-h-screen flex flex-col pb-24">
       <Header
         title={`Surah ${surah.englishName}`}
         subtitle="Step 2: Choose Reciter"

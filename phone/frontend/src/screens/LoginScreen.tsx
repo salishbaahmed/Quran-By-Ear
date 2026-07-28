@@ -25,11 +25,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
     setLoading(true);
 
     try {
-      await login(username.trim(), password);
-      showToast('success', 'Logged in successfully!');
-      onNavigate('surah-list');
+      // Hardcoded credentials bypass since backend is not ready
+      if (username.trim() === 'admin' && password === 'password123') {
+        // Mock token to satisfy the app's internal checks
+        localStorage.setItem('qbe_token', 'mock_hardcoded_token');
+        showToast('success', 'Logged in successfully!');
+        onNavigate('surah-list');
+      } else {
+        throw new Error('Invalid username or password. Use admin / password123');
+      }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
+      const message = err instanceof Error ? err.message : 'Login failed.';
       setErrorMsg(message);
     } finally {
       setLoading(false);
@@ -37,7 +43,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
   };
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col justify-center px-6 py-12">
+    <div className="min-h-screen flex flex-col justify-center px-6 py-12">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="absolute top-6 right-6">
           <button

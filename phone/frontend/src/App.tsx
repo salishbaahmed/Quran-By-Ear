@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { ScreenState, Surah, CurrentlyPlaying } from './types';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AudioPlayerBar } from './components/AudioPlayerBar';
+import { ThemeProvider } from './lib/ThemeContext';
+import { getToken } from './lib/api';
 
 import { SplashScreen } from './screens/SplashScreen';
 import { LoginScreen } from './screens/LoginScreen';
@@ -15,6 +17,20 @@ import { SettingsScreen } from './screens/SettingsScreen';
 
 export function App() {
   const [screen, setScreen] = useState<ScreenState>('splash');
+
+  // Protected screens that require authentication
+  const PROTECTED_SCREENS: ScreenState[] = [
+    'surah-list', 'reciter', 'ayah-range', 'downloading', 'library'
+  ];
+
+  // Route guard: redirects to login if navigating to a protected screen without a token
+  const navigateSafe = useCallback((target: ScreenState) => {
+    if (PROTECTED_SCREENS.includes(target) && !getToken()) {
+      setScreen('login');
+      return;
+    }
+    setScreen(target);
+  }, []);
 
   // Application selection states
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
@@ -48,78 +64,80 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-bg text-fg font-sans relative max-w-md mx-auto border-x border-border/40 shadow-2xl">
-      {/* Toast Notifications Overlay */}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    <ThemeProvider>
+      <div className="islamic-bg min-h-screen text-fg font-sans relative max-w-md mx-auto border-x border-border/40 shadow-2xl">
+        {/* Toast Notifications Overlay */}
+        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Screen Router */}
-      {screen === 'splash' && (
-        <SplashScreen onNavigate={setScreen} />
-      )}
+        {/* Screen Router */}
+        {screen === 'splash' && (
+          <SplashScreen onNavigate={navigateSafe} />
+        )}
 
-      {screen === 'login' && (
-        <LoginScreen onNavigate={setScreen} showToast={showToast} />
-      )}
+        {screen === 'login' && (
+          <LoginScreen onNavigate={navigateSafe} showToast={showToast} />
+        )}
 
-      {screen === 'signup' && (
-        <SignupScreen onNavigate={setScreen} showToast={showToast} />
-      )}
+        {screen === 'signup' && (
+          <SignupScreen onNavigate={navigateSafe} showToast={showToast} />
+        )}
 
-      {screen === 'surah-list' && (
-        <SurahListScreen
-          onNavigate={setScreen}
-          onSelectSurah={setSelectedSurah}
-        />
-      )}
+        {screen === 'surah-list' && (
+          <SurahListScreen
+            onNavigate={navigateSafe}
+            onSelectSurah={setSelectedSurah}
+          />
+        )}
 
-      {screen === 'reciter' && (
-        <ReciterScreen
-          surah={selectedSurah}
-          onNavigate={setScreen}
-          onSelectReciter={setSelectedReciter}
-          showToast={showToast}
-        />
-      )}
+        {screen === 'reciter' && (
+          <ReciterScreen
+            surah={selectedSurah}
+            onNavigate={navigateSafe}
+            onSelectReciter={setSelectedReciter}
+            showToast={showToast}
+          />
+        )}
 
-      {screen === 'ayah-range' && (
-        <AyahRangeScreen
-          surah={selectedSurah}
-          reciter={selectedReciter}
-          onNavigate={setScreen}
-          onSelectRange={handleSelectRange}
-        />
-      )}
+        {screen === 'ayah-range' && (
+          <AyahRangeScreen
+            surah={selectedSurah}
+            reciter={selectedReciter}
+            onNavigate={navigateSafe}
+            onSelectRange={handleSelectRange}
+          />
+        )}
 
-      {screen === 'downloading' && (
-        <DownloadingScreen
-          surah={selectedSurah}
-          reciter={selectedReciter}
-          startAyah={startAyah}
-          endAyah={endAyah}
-          onNavigate={setScreen}
-          showToast={showToast}
-        />
-      )}
+        {screen === 'downloading' && (
+          <DownloadingScreen
+            surah={selectedSurah}
+            reciter={selectedReciter}
+            startAyah={startAyah}
+            endAyah={endAyah}
+            onNavigate={navigateSafe}
+            showToast={showToast}
+          />
+        )}
 
-      {screen === 'library' && (
-        <LibraryScreen
-          currentScreen={screen}
-          onNavigate={setScreen}
-          onPlayItem={setCurrentPlaying}
+        {screen === 'library' && (
+          <LibraryScreen
+            currentScreen={screen}
+            onNavigate={navigateSafe}
+            onPlayItem={setCurrentPlaying}
+            currentPlaying={currentPlaying}
+          />
+        )}
+
+        {screen === 'settings' && (
+          <SettingsScreen onNavigate={navigateSafe} showToast={showToast} />
+        )}
+
+        {/* Global Persistent Audio Player Bar */}
+        <AudioPlayerBar
           currentPlaying={currentPlaying}
+          onClose={() => setCurrentPlaying(null)}
         />
-      )}
-
-      {screen === 'settings' && (
-        <SettingsScreen onNavigate={setScreen} showToast={showToast} />
-      )}
-
-      {/* Global Persistent Audio Player Bar */}
-      <AudioPlayerBar
-        currentPlaying={currentPlaying}
-        onClose={() => setCurrentPlaying(null)}
-      />
-    </div>
+      </div>
+    </ThemeProvider>
   );
 }
 

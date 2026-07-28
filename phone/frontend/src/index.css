@@ -1,5 +1,6 @@
 @import "tailwindcss";
 
+/* ─── DARK THEME (default :root) ─── */
 :root {
   --bg: #0f172a;
   --surface: #1e293b;
@@ -11,6 +12,20 @@
   --accent-hover: #059669;
   --accent-light: rgba(16, 185, 129, 0.15);
   --danger: #ef4444;
+}
+
+/* ─── LIGHT THEME ─── */
+:root:not(.dark) {
+  --bg: #f8f5ef;
+  --surface: #ffffff;
+  --surface-2: #f1ece3;
+  --border: #d4c9b5;
+  --fg: #1a1410;
+  --fg-muted: #6b5e4e;
+  --accent: #0d9966;
+  --accent-hover: #047a52;
+  --accent-light: rgba(13, 153, 102, 0.12);
+  --danger: #dc2626;
 }
 
 @theme {
@@ -35,6 +50,10 @@
   box-sizing: border-box;
 }
 
+html {
+  transition: background-color 0.35s ease, color 0.35s ease;
+}
+
 body {
   background-color: var(--bg);
   color: var(--fg);
@@ -43,6 +62,57 @@ body {
   margin: 0;
   padding: 0;
   touch-action: manipulation;
+  transition: background-color 0.35s ease, color 0.35s ease;
+}
+
+/* ─── QURAN BACKGROUND ─── */
+.islamic-bg {
+  position: relative;
+  background-color: var(--bg);
+  transition: background-color 0.4s ease;
+}
+
+/* Background image & overlay container (fixed so it doesn't stretch on long pages like Surah list) */
+.islamic-bg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 28rem; /* matches max-w-md (448px) */
+  pointer-events: none;
+  z-index: 0;
+  background-image: url('/quran_bg.png');
+  background-size: cover;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+  transition: background 0.4s ease;
+}
+
+/* Dark mode — deep navy/teal overlay over the image */
+:root.dark .islamic-bg::before {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(10, 18, 38, 0.82) 0%,
+    rgba(10, 24, 40, 0.70) 40%,
+    rgba(10, 20, 35, 0.78) 100%
+  ), url('/quran_bg.png');
+}
+
+/* Light mode — warm cream overlay over the image */
+:root:not(.dark) .islamic-bg::before {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(248, 245, 239, 0.80) 0%,
+    rgba(245, 240, 228, 0.68) 40%,
+    rgba(248, 245, 235, 0.78) 100%
+  ), url('/quran_bg.png');
+}
+
+/* All child content sits above the fixed background */
+.islamic-bg > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Custom scrollbars */
@@ -66,6 +136,21 @@ body {
   opacity: 0.9;
 }
 
+/* Theme transition for surfaces */
+.bg-bg, .bg-surface, .bg-surface-2 {
+  transition: background-color 0.35s ease, border-color 0.35s ease, color 0.35s ease;
+}
+
 .font-arabic {
   font-family: var(--font-arabic);
+}
+
+/* Dark mode toggle animation */
+@keyframes toggle-pop {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.toggle-pop {
+  animation: toggle-pop 0.25s ease forwards;
 }

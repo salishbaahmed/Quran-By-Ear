@@ -43,7 +43,7 @@ export const SignupScreen: React.FC<SignupScreenProps> = ({ onNavigate, showToas
   };
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col justify-center px-6 py-12">
+    <div className="min-h-screen flex flex-col justify-center px-6 py-12">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <button
           onClick={() => onNavigate('login')}

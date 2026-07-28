@@ -55,7 +55,7 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col pb-24">
+    <div className="min-h-screen flex flex-col pb-24">
       <Header
         title="Ayah Range Selection"
         subtitle="Step 3: Select Ayah range"

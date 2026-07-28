@@ -9,6 +9,7 @@ declare global {
       recordPlayStart(filename: string): void;
       updateStats(filename: string, timeListenedSeconds: number): void;
       getAllStats(): string; // returns JSON string array of AudioStat
+      deleteFile(filename: string): void;
     };
   }
 }
@@ -43,6 +44,27 @@ export function downloadAudio(url: string, filename: string, token: string): voi
         console.error("[Dev Mock] Error saving mock file:", err);
       }
     }, 1000);
+  }
+}
+
+export function deleteAudio(filename: string): void {
+  if (isNativeBridgeAvailable()) {
+    if (window.AndroidBridge!.deleteFile) {
+      window.AndroidBridge!.deleteFile(filename);
+    } else {
+      console.warn("deleteFile not implemented on native AndroidBridge yet");
+    }
+  } else {
+    console.log("[Dev Mock] deleteAudio requested:", filename);
+    try {
+      const stored = localStorage.getItem(MOCK_FILES_KEY);
+      let files: string[] = stored ? JSON.parse(stored) : [];
+      files = files.filter(f => f !== filename);
+      localStorage.setItem(MOCK_FILES_KEY, JSON.stringify(files));
+      console.log("[Dev Mock] File removed from mock downloads:", filename);
+    } catch (err) {
+      console.error("[Dev Mock] Error deleting mock file:", err);
+    }
   }
 }
 

@@ -21,7 +21,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onNavigate }) => {
   }, [onNavigate]);
 
   return (
-    <div className="min-h-screen bg-bg flex flex-col items-center justify-center p-6 text-center select-none">
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center select-none">
       <div className="relative mb-6">
         <div className="w-24 h-24 rounded-3xl bg-accent-light flex items-center justify-center border border-accent/30 shadow-2xl animate-pulse">
           <span className="text-5xl">📖</span>
