@@ -94,40 +94,62 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
     ctx.fillStyle = '#d4af37';
     ctx.fillText(item?.parsed?.reciter || '', canvas.width / 2, 170);
 
-    // Determine current ayah to show
-    // We don't have per-ayah timestamps, so we evenly distribute time across the number of ayahs
-    if (ayahs.length > 0 && duration > 0) {
-      const timePerAyah = duration / ayahs.length;
-      const currentIndex = Math.min(Math.floor(currentTime / timePerAyah), ayahs.length - 1);
-      const currentAyah = ayahs[currentIndex];
-
+    // Show all ayahs at once to avoid sync issues
+    if (ayahs.length > 0) {
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 50px sans-serif'; // In real app, use custom Arabic font
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.direction = 'rtl'; // Enable native RTL support
+
+      // Combine all ayahs into one text block
+      const fullText = ayahs.map(a => `${a.text} ﴿${a.number}﴾`).join(' ');
       
-      // Basic text wrapping for Arabic text
-      const words = currentAyah.text.split(' ');
-      let line = '';
-      let y = canvas.height / 2 - 100;
-      const lineHeight = 80;
-
-      // Reverse words for basic RTL rendering on canvas (since basic canvas fillText might struggle with complex RTL text wrapping)
-      words.reverse().forEach(word => {
-        const testLine = line + word + ' ';
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > canvas.width - 100 && line !== '') {
-          ctx.fillText(line, canvas.width / 2, y);
-          line = word + ' ';
-          y += lineHeight;
-        } else {
-          line = testLine;
+      // Calculate a dynamic font size based on text length
+      const maxFontSize = 50;
+      const minFontSize = 20;
+      let currentFontSize = maxFontSize;
+      
+      // We will adjust font size down if it requires too many lines
+      let lines: string[] = [];
+      const maxWidth = canvas.width - 100;
+      const maxHeight = canvas.height - 350; // Leave room for header and progress bar
+      
+      while (currentFontSize >= minFontSize) {
+        ctx.font = `bold ${currentFontSize}px sans-serif`;
+        const words = fullText.split(' ');
+        lines = [];
+        let currentLine = '';
+        
+        for (let i = 0; i < words.length; i++) {
+          const testLine = currentLine === '' ? words[i] : currentLine + ' ' + words[i];
+          const metrics = ctx.measureText(testLine);
+          if (metrics.width > maxWidth && currentLine !== '') {
+            lines.push(currentLine);
+            currentLine = words[i];
+          } else {
+            currentLine = testLine;
+          }
         }
-      });
-      ctx.fillText(line, canvas.width / 2, y);
+        if (currentLine) {
+          lines.push(currentLine);
+        }
+        
+        const totalHeight = lines.length * (currentFontSize * 1.6);
+        if (totalHeight <= maxHeight) {
+          break; // Fits perfectly!
+        }
+        currentFontSize -= 2; // Shrink font and try again
+      }
 
-      // Ayah number
-      ctx.fillStyle = '#d4af37';
-      ctx.font = '30px sans-serif';
-      ctx.fillText(`Ayah ${currentAyah.number}`, canvas.width / 2, y + lineHeight + 40);
+      // Draw the lines centered vertically
+      const totalTextHeight = lines.length * (currentFontSize * 1.6);
+      let startY = (canvas.height / 2) - (totalTextHeight / 2) + 20;
+      
+      // Notice: x is canvas.width / 2 because textAlign = 'center'
+      lines.forEach(line => {
+        ctx.fillText(line, canvas.width / 2, startY);
+        startY += currentFontSize * 1.6;
+      });
     }
 
     // Progress bar at bottom
