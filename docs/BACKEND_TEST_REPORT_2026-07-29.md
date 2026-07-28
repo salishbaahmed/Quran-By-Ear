@@ -1,122 +1,103 @@
-# 🔴 Backend Test Report
+# ✅ Backend Test Report — Server Online
 **Date:** 2026-07-29  
 **Tested by:** Frontend Team  
 **Frontend Machine IP:** `192.168.1.33` (Wi-Fi)  
-**Expected Backend URL:** `http://192.168.1.38:3000` / `http://DESKTOP-85K359Q.local:3000`
+**Backend URL:** `http://192.168.1.38:3000`  
+**Status:** 🟢 **SERVER IS ONLINE**
+
+> This report supersedes `BACKEND_TEST_REPORT_2026-07-29.md` (previous report when server was down).
 
 ---
 
-## ⚠️ Summary
+## 🧪 Full Endpoint Test Results
 
-**The backend server is currently unreachable from the frontend machine.**  
-All API endpoint tests timed out or failed DNS resolution on **both port 3000 and port 4000**.  
-The frontend app cannot connect to the backend beyond the Login screen (which is temporarily hardcoded with `admin` / `password123` as a bypass).
-
----
-
-## 🧪 Endpoint Test Results
-
-### Port 3000 (Correct port per backend team)
-
-| # | Method | Endpoint | Expected | Result |
-|---|--------|----------|----------|--------|
-| 1 | `GET` | `/api/reciters` | `200 OK` + JSON array | ❌ **Timed Out** |
-| 2 | `POST` | `/api/auth/login` | `200 OK` + token | ❌ **Timed Out** |
-| 3 | `POST` | `/api/auth/signup` | `201 Created` | ❌ **Timed Out** |
-
-### Port 4000 (Previously hardcoded in frontend — now corrected to 3000)
-
-| # | Method | Endpoint | Result |
-|---|--------|----------|--------|
-| 1 | `GET` | `/api/reciters` | ❌ **Timed Out** |
-| 2 | `POST` | `/api/auth/login` | ❌ **Timed Out** |
-| 3 | `POST` | `/api/auth/signup` | ❌ **Timed Out** |
+### Connectivity
+| Test | Result |
+|------|--------|
+| TCP Ping `192.168.1.38:3000` | ✅ **True** — Port open, server responding |
 
 ---
 
-## 🔍 Network Connectivity Diagnostics
+### Auth Endpoints
 
-| Test | Target | Port | Result |
-|------|--------|------|--------|
-| TCP Ping | `192.168.1.38` | `3000` | ❌ **False** — port not open |
-| TCP Ping | `192.168.1.38` | `4000` | ❌ **False** — port not open |
-| DNS Resolve | `DESKTOP-85K359Q.local` | `3000` | ❌ **Failed** — hostname not resolvable |
-| localhost | `127.0.0.1` | `3000` | ❌ **Timed Out** — not running locally either |
+| # | Method | Endpoint | Test Case | Status | Result |
+|---|--------|----------|-----------|--------|--------|
+| 1 | `POST` | `/api/auth/signup` | Valid new user | ❌ **404 Not Found** | Route does not exist |
+| 2 | `POST` | `/api/auth/login` | Valid credentials | ❌ **404 Not Found** | Route does not exist |
+| 3 | `POST` | `/api/auth/login` | Wrong password | ❌ **404 Not Found** | Route does not exist |
+| 4 | `POST` | `/auth/login` (no `/api` prefix) | Valid credentials | ❌ **404 Not Found** | Route does not exist |
 
-**Frontend machine is on:** `192.168.1.33` (Wi-Fi)  
-**Backend machine expected at:** `192.168.1.38` — but no open port found.
-
----
-
-## 🔎 Root Cause Analysis
-
-Most likely causes (in order of probability):
-
-1. **`node server.js` / `npm start` has not been run** — the server process is simply not started.
-2. **Backend machine is on a different Wi-Fi/network** — `192.168.1.38` is not reachable from `192.168.1.33` on this network right now.
-3. **Windows Firewall is blocking port 3000** — the Node.js process is running but Windows is blocking inbound connections from the LAN.
+> **⚠️ Auth routes are completely missing.** The frontend expects `POST /api/auth/login` and `POST /api/auth/signup` but both return 404. Until this is fixed, real login/signup does not work. The frontend is currently using a hardcoded bypass (`admin`/`password123`) to unblock development.
 
 ---
 
-## ✅ What the Frontend Can Do Right Now (No Backend Required)
+### Audio / Reciters Endpoints
 
-| Feature | Status |
-|---------|--------|
-| App loads and renders | ✅ Working |
-| Login (`admin` / `password123` hardcoded bypass) | ✅ Working |
-| Surah list + search | ✅ Working |
-| Ayah range selection (defaults to full Surah) | ✅ Working |
-| Dark/Light mode toggle | ✅ Working |
-| Library screen (mock `localStorage` data) | ✅ Working |
-| Delete downloaded audio | ✅ Working |
-| Audio Player (loop, speed, sleep timer) | ✅ Working |
-| Toast notifications (overlay, 2s) | ✅ Working |
-| MP4 Video Generator screen | ✅ Built — needs actual downloaded file to test |
-| Reciters screen | ❌ **Blocked** — calls `/api/reciters` |
-| Download | ❌ **Blocked** — calls `/api/download` |
+| # | Method | Endpoint | Auth | Status | Result |
+|---|--------|----------|------|--------|--------|
+| 5 | `GET` | `/api/reciters` | None | ✅ **200 OK** | Returns correct JSON array |
+| 6 | `GET` | `/api/reciters` | Bearer token | ✅ **200 OK** | Returns correct JSON array |
+| 7 | `GET` | `/api/download` Surah 2, Ayah 1-5 | Bearer token | ✅ **200 OK** | `audio/mpeg`, 1,350,556 bytes |
+| 8 | `GET` | `/api/download` Surah 4, Ayah 1-3 | Bearer token | ✅ **200 OK** | `audio/mpeg`, 2,399,425 bytes |
+| 9 | `GET` | `/api/audio` Surah 1, Ayah 1 | Bearer token | ✅ **200 OK** | `audio/mpeg`, 104,827 bytes |
+| 10 | `GET` | `/api/audio` Surah 2, Ayah 255 | Bearer token | ✅ **200 OK** | `audio/mpeg`, 1,308,550 bytes |
 
 ---
 
-## 🔧 Actions Required from Backend Team
+### Surah Download Bug Verification (`/api/download`)
 
-### 🔴 Priority 1 — Start the Server
-```bash
-# In the backend directory (e.g., phone/server or server/)
-node server.js
-# or
-npm start
+Previously reported bug: the `/api/download` route was ignoring the `surah` parameter and always returning Surah 1 (Al-Fatiha).
+
+| Test | Download Size |
+|------|--------------|
+| Surah 1 (Al-Fatiha), Ayah 1–7 | 1,003,859 bytes |
+| Surah 4 (An-Nisa), Ayah 1–7 | 5,513,430 bytes |
+
+✅ **SURAH DOWNLOAD BUG IS FIXED.** The two files are completely different sizes, confirming the `surah` parameter is now being correctly read and the correct audio is being served.
+
+---
+
+### New `/api/audio` Endpoint (Per-Ayah)
+
+| Test | Download Size |
+|------|--------------|
+| Surah 1, Ayah 1 | 104,827 bytes |
+| Surah 2, Ayah 255 (Ayatul Kursi) | 1,308,550 bytes |
+
+✅ **`/api/audio` endpoint exists and is working.** The frontend can now use this to implement Bismillah/Sadaqallah injection and client-side MP3 concatenation. See `FRONTEND_NOTES.md` for details.
+
+---
+
+## 🔴 Outstanding Issues (Backend Must Fix)
+
+### 1. Auth Routes Missing — CRITICAL
+Both `POST /api/auth/login` and `POST /api/auth/signup` return `404 Not Found`.
+
+**Expected behavior:**
+```http
+POST /api/auth/login
+Body: { "username": "user1", "password": "password123" }
+Response 200: { "accessToken": "eyJhbG..." }
+
+POST /api/auth/signup
+Body: { "username": "user1", "password": "password123" }
+Response 201: { "message": "User created successfully", "id": 1 }
 ```
-Confirm it logs: `Server running on port 3000` (or similar).
-
-### 🔴 Priority 2 — Confirm IP Address
-Run this on the backend machine and share the result:
-```bash
-ipconfig
-```
-If the IPv4 address has changed from `192.168.1.38`, please share the new IP so the frontend can update the Settings page.
-
-### 🔴 Priority 3 — Allow Port 3000 Through Windows Firewall
-If the backend is running but still unreachable, run this on the **backend machine**:
-```powershell
-netsh advfirewall firewall add rule name="QBE Backend Port 3000" dir=in action=allow protocol=TCP localport=3000
-```
-
-### 🟡 Priority 4 — Fix Surah Download Bug
-The `/api/download` route ignores the `surah` query parameter and always returns Surah Al-Fatiha.  
-See full details: [BACKEND_BUG_SURAH_DOWNLOAD.md](./BACKEND_BUG_SURAH_DOWNLOAD.md)
-
-### 🟡 Priority 5 — Implement Per-Ayah Audio Endpoint
-New endpoint needed: `GET /api/audio?reciter=X&surah=Y&ayah=Z`  
-See full details: [BACKEND_AUDIO_API_REQUIREMENTS.md](./BACKEND_AUDIO_API_REQUIREMENTS.md)
+These routes are documented in [SERVER_API.md](./SERVER_API.md) but are not implemented in the running server. The frontend's `api.ts` calls these routes on real login/signup. Until they are live, only the hardcoded bypass works.
 
 ---
 
-## 📌 Frontend Change Made During Testing
+## ✅ Resolved Issues (No Longer Actionable)
 
-The default API base URL has been corrected from port `4000` → `3000` in `phone/frontend/src/lib/api.ts`.
+| Issue | Status |
+|-------|--------|
+| Surah download bug (always returned Fatiha) | ✅ **FIXED** — see `BACKEND_BUG_SURAH_DOWNLOAD.md` |
+| `/api/audio` per-ayah endpoint missing | ✅ **IMPLEMENTED** — see `BACKEND_AUDIO_API_REQUIREMENTS.md` |
+| Server not reachable (crashed) | ✅ **RESOLVED** — server restarted, port 3000 open |
 
 ---
 
-## 📞 Next Steps
+## 📌 Notes
 
-Once the backend is online, notify the frontend team and we will immediately re-run all endpoint tests and verify full end-to-end functionality.
+- `/api/reciters` currently returns reciters **without requiring authentication** (no auth header needed). The frontend sends a Bearer token anyway, which is correctly ignored. This may need an auth guard added in the future.
+- The frontend default API URL has been corrected to `http://DESKTOP-85K359Q.local:3000` (was incorrectly `4000` in a previous commit).

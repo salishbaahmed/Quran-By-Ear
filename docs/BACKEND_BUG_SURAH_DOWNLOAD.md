@@ -1,4 +1,7 @@
-# 🐛 Bug Report: Wrong Surah Downloaded
+# 🐛 Bug Report: Surah Download Route — Wrong Surah Returned
+
+> [!NOTE]
+> ✅ **RESOLVED** — Confirmed fixed on 2026-07-29 via frontend endpoint testing. Surah 1 and Surah 4 now return different audio files. This document is retained for historical context.
 
 **Reported by:** Frontend Team  
 **Date:** 2026-07-28  

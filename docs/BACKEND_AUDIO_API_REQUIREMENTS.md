@@ -1,5 +1,8 @@
 # 🚀 Backend Requirement: Per-Ayah Audio Endpoint
 
+> [!NOTE]
+> ✅ **IMPLEMENTED** — Confirmed working on 2026-07-29. `GET /api/audio?reciter=X&surah=Y&ayah=Z` returns `audio/mpeg` correctly. This document is retained for reference.
+
 **Reported by:** Frontend Team  
 **Date:** 2026-07-28  
 **Component:** Backend API (`server/server.js`)
