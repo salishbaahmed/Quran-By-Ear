@@ -1,5 +1,9 @@
 package com.example.quran_by_ear
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -12,11 +16,29 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.example.quran_by_ear.theme.QuranByEarTheme
 
 class MainActivity : ComponentActivity() {
+  private var mainWebView: WebView? = null
+  
+  private val mediaActionReceiver = object : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+      val action = intent?.getStringExtra("action")
+      if (action == "PLAY") {
+        mainWebView?.evaluateJavascript("window.dispatchEvent(new Event('native-play'))", null)
+      } else if (action == "PAUSE") {
+        mainWebView?.evaluateJavascript("window.dispatchEvent(new Event('native-pause'))", null)
+      }
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    
+    LocalBroadcastManager.getInstance(this).registerReceiver(
+      mediaActionReceiver, IntentFilter("MEDIA_ACTION")
+    )
 
     enableEdgeToEdge()
     setContent {
@@ -25,6 +47,7 @@ class MainActivity : ComponentActivity() {
           AndroidView(
             factory = { context ->
               WebView(context).apply {
+                mainWebView = this
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
@@ -45,5 +68,10 @@ class MainActivity : ComponentActivity() {
         } 
       }
     }
+  }
+
+  override fun onDestroy() {
+    super.onDestroy()
+    LocalBroadcastManager.getInstance(this).unregisterReceiver(mediaActionReceiver)
   }
 }

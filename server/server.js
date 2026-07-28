@@ -5,10 +5,6 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const ffmpeg = require('fluent-ffmpeg');
-const ffmpegPath = require('ffmpeg-static');
-
-ffmpeg.setFfmpegPath(ffmpegPath);
 
 const db = require('./database');
 const app = express();
@@ -19,11 +15,6 @@ app.use(express.json());
 const DATASET_PATH = process.env.DATASET_PATH || 'B:\\Quran';
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-dev-key';
-const TEMP_DIR = path.join(__dirname, 'temp');
-
-if (!fs.existsSync(TEMP_DIR)) {
-    fs.mkdirSync(TEMP_DIR);
-}
 
 // Helper
 const pad3 = (num) => String(num).padStart(3, '0');
@@ -93,62 +84,7 @@ app.get('/api/reciters', authenticateToken, (req, res) => {
     }
 });
 
-// Download & Concatenate MP3
-app.get('/api/download', authenticateToken, (req, res) => {
-    const { reciter, surah, startAyah, endAyah } = req.query;
-    
-    if (!reciter || !surah || !startAyah || !endAyah) {
-        return res.status(400).json({ error: 'Missing required parameters: reciter, surah, startAyah, endAyah' });
-    }
 
-    const sAyah = parseInt(startAyah);
-    const eAyah = parseInt(endAyah);
-    
-    if (sAyah > eAyah) {
-        return res.status(400).json({ error: 'startAyah must be <= endAyah' });
-    }
-
-    const timestamp = Date.now();
-    const listFile = path.join(TEMP_DIR, `concat-${timestamp}.txt`);
-    const outputFile = path.join(TEMP_DIR, `out-${timestamp}.mp3`);
-    
-    let listContent = '';
-    for (let a = sAyah; a <= eAyah; a++) {
-        const filepath = path.join(DATASET_PATH, reciter, `${pad3(surah)}${pad3(a)}.mp3`);
-        if (!fs.existsSync(filepath)) {
-            return res.status(404).json({ error: `File not found for Ayah ${a}` });
-        }
-        // FFMPEG requires forward slashes and absolute paths in single quotes
-        listContent += `file '${filepath.replace(/\\/g, '/')}'\n`;
-    }
-
-    fs.writeFileSync(listFile, listContent);
-
-    const downloadFilename = `Surah_${surah}_Ayahs_${startAyah}-${endAyah}_${reciter}.mp3`;
-
-    ffmpeg()
-        .input(listFile)
-        .inputOptions(['-f', 'concat', '-safe', '0'])
-        .outputOptions([
-            '-c', 'copy', // Stream copy for speed (no re-encoding)
-            `-metadata`, `title=Surah ${surah} Ayahs ${startAyah}-${endAyah}`,
-            `-metadata`, `artist=${reciter}`,
-            `-metadata`, `album=Quran By Ear`
-        ])
-        .save(outputFile)
-        .on('end', () => {
-            res.download(outputFile, downloadFilename, (err) => {
-                // Cleanup temp files
-                if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
-                if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile);
-            });
-        })
-        .on('error', (err) => {
-            console.error('FFMPEG Error:', err);
-            if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
-            res.status(500).json({ error: 'Audio processing failed' });
-        });
-});
 
 if (require.main === module) {
     app.listen(PORT, '0.0.0.0', () => {

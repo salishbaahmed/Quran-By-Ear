@@ -73,4 +73,46 @@ class AndroidBridge(private val context: Context) {
     fun getAllStats(): String {
         return dbHelper.getAllStats().toString()
     }
+
+    @JavascriptInterface
+    fun deleteFile(filename: String) {
+        val file = File(downloadDir, filename)
+        if (file.exists()) {
+            file.delete()
+        }
+        dbHelper.deleteStats(filename)
+    }
+
+    @JavascriptInterface
+    fun startForegroundService(title: String, artist: String) {
+        val intent = android.content.Intent(context, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_START_FOREGROUND
+            putExtra(PlaybackService.EXTRA_TITLE, title)
+            putExtra(PlaybackService.EXTRA_ARTIST, artist)
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+        } else {
+            context.startService(intent)
+        }
+    }
+
+    @JavascriptInterface
+    fun stopForegroundService() {
+        val intent = android.content.Intent(context, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_STOP_FOREGROUND
+        }
+        context.startService(intent)
+    }
+
+    @JavascriptInterface
+    fun updateMediaSessionMetadata(title: String, artist: String, isPlaying: Boolean) {
+        val intent = android.content.Intent(context, PlaybackService::class.java).apply {
+            action = PlaybackService.ACTION_UPDATE_METADATA
+            putExtra(PlaybackService.EXTRA_TITLE, title)
+            putExtra(PlaybackService.EXTRA_ARTIST, artist)
+            putExtra(PlaybackService.EXTRA_IS_PLAYING, isPlaying)
+        }
+        context.startService(intent)
+    }
 }
