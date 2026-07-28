@@ -55,7 +55,7 @@ export function App() {
 
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3500);
+    }, 2000);
   }, []);
 
   const dismissToast = (id: string) => {
