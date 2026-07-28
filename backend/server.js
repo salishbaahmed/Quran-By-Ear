@@ -1,3 +1,11 @@
+const cp = require('child_process');
+const originalSpawn = cp.spawn;
+cp.spawn = function(command, args, options) {
+    options = options || {};
+    options.windowsHide = true;
+    return originalSpawn(command, args, options);
+};
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');

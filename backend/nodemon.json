@@ -1,0 +1,1 @@
+{ " "ignore: [ users.db, users.db-journal, temp/*, *.mp3, *.webm, *.mp4 ] } 
