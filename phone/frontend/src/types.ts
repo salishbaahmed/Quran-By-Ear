@@ -16,6 +16,7 @@ export interface Surah {
   arabicName: string;
   totalAyahs: number;
   englishTranslation?: string;
+  transliteration?: string; // e.g. 'Al-Fatiha', 'Al-Baqarah'
 }
 
 export interface AudioStat {

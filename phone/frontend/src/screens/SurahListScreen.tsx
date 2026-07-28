@@ -22,7 +22,9 @@ export const SurahListScreen: React.FC<SurahListScreenProps> = ({
       surah.englishName.toLowerCase().includes(q) ||
       surah.arabicName.includes(q) ||
       surah.number.toString() === q ||
-      (surah.englishTranslation && surah.englishTranslation.toLowerCase().includes(q))
+      (surah.englishTranslation && surah.englishTranslation.toLowerCase().includes(q)) ||
+      // Transliteration search: match common romanizations without diacritics
+      (surah.transliteration && surah.transliteration.toLowerCase().includes(q))
     );
   });
 

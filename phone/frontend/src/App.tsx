@@ -69,10 +69,17 @@ export function App() {
 
   return (
     <ThemeProvider>
-      <div className="islamic-bg min-h-screen text-fg font-sans relative max-w-md mx-auto border-x border-border/40 shadow-2xl">
-        {/* Toast Notifications Overlay */}
-        <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {/* Toast Notifications — true full-viewport fixed overlay */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
+      {/* Global Persistent Audio Player Bar — true full-viewport fixed */}
+      <AudioPlayerBar
+        currentPlaying={currentPlaying}
+        onClose={() => setCurrentPlaying(null)}
+      />
+
+      {/* App container — constrained to max-w-md */}
+      <div className="islamic-bg min-h-screen text-fg font-sans relative max-w-md mx-auto border-x border-border/40 shadow-2xl">
         {/* Screen Router */}
         {screen === 'splash' && (
           <SplashScreen onNavigate={navigateSafe} />
@@ -143,12 +150,6 @@ export function App() {
             showToast={showToast}
           />
         )}
-
-        {/* Global Persistent Audio Player Bar */}
-        <AudioPlayerBar
-          currentPlaying={currentPlaying}
-          onClose={() => setCurrentPlaying(null)}
-        />
       </div>
     </ThemeProvider>
   );

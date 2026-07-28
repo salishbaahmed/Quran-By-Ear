@@ -17,7 +17,7 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
   onSelectReciter,
   showToast,
 }) => {
-  const [reciters, setReciters] = useState<string[]>([]);
+  const [reciters, setReciters] = useState<Reciter[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -31,10 +31,10 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
         onNavigate('login');
       });
 
-      // Normalize array of strings or objects
-      const normalized: string[] = (data as (string | Reciter)[]).map((r) => {
-        if (typeof r === 'string') return r;
-        return r.name || r.id;
+      // Normalize array of strings or objects, always return Reciter shape
+      const normalized: Reciter[] = (data as (string | Reciter)[]).map((r) => {
+        if (typeof r === 'string') return { id: r, name: r.replace(/_/g, ' ') };
+        return { id: r.id || r.name, name: r.name || r.id };
       });
 
       setReciters(normalized);
@@ -56,7 +56,8 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
   }
 
   const filteredReciters = reciters.filter((r) =>
-    r.toLowerCase().includes(searchQuery.toLowerCase().trim())
+    r.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
+    r.id.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
 
   return (
@@ -134,15 +135,23 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
                 placeholder="Search reciter name..."
                 className="w-full pl-10 pr-4 py-3 bg-surface border border-border rounded-xl text-fg text-sm placeholder-fg-muted/60 focus:outline-none focus:border-accent shadow-sm"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-xs font-semibold text-fg-muted hover:text-fg"
+                >
+                  Clear
+                </button>
+              )}
             </div>
 
             {/* Reciter List */}
             <div className="space-y-2">
-              {filteredReciters.map((reciter, idx) => (
+              {filteredReciters.map((reciter) => (
                 <div
-                  key={idx}
+                  key={reciter.id}
                   onClick={() => {
-                    onSelectReciter(reciter);
+                    onSelectReciter(reciter.id); // Pass the folder ID for API calls
                     onNavigate('ayah-range');
                   }}
                   className="bg-surface hover:bg-surface-2 border border-border/80 rounded-xl p-3.5 flex items-center justify-between cursor-pointer active-scale transition-colors"
@@ -152,7 +161,7 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
                       <UserCheck className="w-4 h-4" />
                     </div>
                     <span className="text-sm font-semibold text-fg">
-                      {reciter}
+                      {reciter.name} {/* Display the formatted name */}
                     </span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-fg-muted" />
