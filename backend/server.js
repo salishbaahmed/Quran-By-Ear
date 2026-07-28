@@ -8,6 +8,8 @@ const jwt = require('jsonwebtoken');
 const Database = require('better-sqlite3');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = require('ffmpeg-static');
+const multer = require('multer');
+const mp3Duration = require('mp3-duration');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -15,15 +17,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const DATASET_PATH = process.env.DATASET_PATH || 'C:\\Users\\SAA\\Documents\\Quran';
-const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || 'quran-by-ear-dev-secret';
-
-// --- Temp dir for ffmpeg ---
 const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) {
     fs.mkdirSync(TEMP_DIR);
 }
+const upload = multer({ dest: TEMP_DIR });
+
+const DATASET_PATH = process.env.DATASET_PATH || 'C:\\Users\\SAA\\Documents\\Quran';
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'quran-by-ear-dev-secret';
 
 // --- SQLite Database ---
 const db = new Database(path.join(__dirname, 'users.db'));
@@ -253,6 +255,109 @@ app.get('/api/download', (req, res) => {
             cleanup();
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Audio processing failed' });
+            }
+        });
+});
+
+/**
+ * GET /api/audio/timings?reciter=...&surah=...&startAyah=...&endAyah=...
+ * Returns an array of timestamps (start, end, duration) for each Ayah in the generated file.
+ */
+app.get('/api/audio/timings', async (req, res) => {
+    const { reciter, surah, startAyah, endAyah } = req.query;
+
+    if (!reciter || !surah || !startAyah || !endAyah) {
+        return res.status(400).json({ error: 'Missing required parameters: reciter, surah, startAyah, endAyah' });
+    }
+
+    const surahNumber = parseInt(surah, 10);
+    const sAyah = parseInt(startAyah, 10);
+    const eAyah = parseInt(endAyah, 10);
+
+    if (isNaN(surahNumber) || isNaN(sAyah) || isNaN(eAyah) || sAyah > eAyah || surahNumber < 1 || surahNumber > 114) {
+        return res.status(400).json({ error: 'Invalid surah or ayah parameters' });
+    }
+
+    const timings = [];
+    let currentStartTime = 0;
+
+    const getDuration = async (prefixName) => {
+        const prefixPath = path.join(DATASET_PATH, reciter, prefixName);
+        if (fs.existsSync(prefixPath)) {
+            const duration = await mp3Duration(prefixPath);
+            currentStartTime += duration;
+        }
+    };
+
+    try {
+        if (sAyah === 1) {
+            if (surahNumber === 1 || surahNumber === 9) {
+                await getDuration('audhubillah.mp3');
+            } else {
+                const abPath = path.join(DATASET_PATH, reciter, 'Audhubillah_Bismillah.mp3');
+                if (fs.existsSync(abPath)) {
+                    await getDuration('Audhubillah_Bismillah.mp3');
+                } else {
+                    await getDuration('bismillah.mp3');
+                }
+            }
+        } else {
+            await getDuration('audhubillah.mp3');
+        }
+
+        for (let a = sAyah; a <= eAyah; a++) {
+            const filepath = path.join(DATASET_PATH, reciter, `${pad3(surahNumber)}${pad3(a)}.mp3`);
+            if (!fs.existsSync(filepath)) {
+                return res.status(404).json({ error: `Audio file not found for Ayah ${a} of Surah ${surahNumber}` });
+            }
+            const duration = await mp3Duration(filepath);
+            timings.push({
+                ayah: a,
+                start: currentStartTime,
+                end: currentStartTime + duration,
+                duration
+            });
+            currentStartTime += duration;
+        }
+
+        res.json({ timings });
+    } catch (err) {
+        console.error('Timings error:', err);
+        res.status(500).json({ error: 'Failed to calculate audio timings' });
+    }
+});
+
+/**
+ * POST /api/video/transcode
+ * Receives a .webm blob and transcodes it to .mp4 using native FFmpeg.
+ */
+app.post('/api/video/transcode', upload.single('video'), (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'No video file provided' });
+    }
+
+    const inputPath = req.file.path;
+    const outputPath = `${inputPath}_out.mp4`;
+
+    ffmpeg(inputPath)
+        .outputOptions([
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-c:a', 'aac'
+        ])
+        .save(outputPath)
+        .on('end', () => {
+            res.download(outputPath, 'generated_video.mp4', (err) => {
+                if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            });
+        })
+        .on('error', (err) => {
+            console.error('Transcode error:', err);
+            if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+            if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Transcoding failed' });
             }
         });
 });

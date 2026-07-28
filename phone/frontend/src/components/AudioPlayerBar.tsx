@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, X, Disc, RotateCcw, RotateCw, Repeat, Gauge, Timer } from 'lucide-react';
+import { Play, Pause, X, Disc, RotateCcw, RotateCw, Repeat, FastForward, Timer } from 'lucide-react';
 import { CurrentlyPlaying } from '../types';
 import { updateStats, recordPlayStart } from '../lib/androidBridge';
 
@@ -288,7 +288,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
               title="Playback speed"
             >
               <span className="flex items-center gap-0.5">
-                <Gauge className="w-3 h-3 shrink-0" />
+                <FastForward className="w-3 h-3 shrink-0" />
                 {speed}x
               </span>
             </button>
