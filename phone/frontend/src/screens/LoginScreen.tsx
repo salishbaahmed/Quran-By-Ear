@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ScreenState } from '../types';
 import { login } from '../lib/api';
-import { Lock, User, LogIn, AlertCircle } from 'lucide-react';
+import { Lock, User, LogIn, AlertCircle, Settings } from 'lucide-react';
 
 interface LoginScreenProps {
   onNavigate: (screen: ScreenState) => void;
@@ -125,7 +125,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-4">
             <p className="text-xs text-fg-muted">
               Don't have an account?{' '}
               <button
@@ -135,6 +135,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
                 Sign up
               </button>
             </p>
+            
+            <button
+              onClick={() => onNavigate('settings')}
+              className="inline-flex items-center gap-2 text-xs text-fg-muted hover:text-fg transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+              <span>Server Settings</span>
+            </button>
           </div>
         </div>
       </div>
