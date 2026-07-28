@@ -141,6 +141,7 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
   const startGeneration = async () => {
     if (!canvasRef.current || !audioRef.current || ayahs.length === 0) return;
     
+    isCancelledRef.current = false;
     setStatus('recording');
     setErrorMsg(null);
     setProgress(0);
@@ -187,6 +188,7 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
     };
 
     recorder.onstop = async () => {
+      if (isCancelledRef.current) return;
       const webmBlob = new Blob(chunksRef.current, { type: mimeType });
       setStatus('transcoding');
       
@@ -194,11 +196,13 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
         const mp4Blob = await transcodeWebmToMp4(webmBlob, ({ ratio }) => {
           setProgress(Math.round(ratio * 100));
         });
+        if (isCancelledRef.current) return;
         const url = URL.createObjectURL(mp4Blob);
         setMp4BlobUrl(url);
         setStatus('done');
         showToast('success', 'Video generated successfully!');
       } catch (err) {
+        if (isCancelledRef.current) return;
         console.error("Transcode error:", err);
         setErrorMsg('Failed to process video format. (FFmpeg Wasm Error)');
         setStatus('idle');
@@ -235,6 +239,25 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
     }
   };
 
+  const isCancelledRef = useRef(false);
+
+  const handleCancel = () => {
+    isCancelledRef.current = true;
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
+    if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
+    setStatus('idle');
+    setMp4BlobUrl(null);
+  };
+
   const downloadVideo = () => {
     if (!mp4BlobUrl) return;
     const a = document.createElement('a');
@@ -254,7 +277,8 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
         showBack={true}
         onBack={() => {
           if (status === 'recording' || status === 'transcoding') {
-            showToast('error', 'Please wait for the process to finish.');
+            handleCancel();
+            onNavigate('library');
           } else {
             onNavigate('library');
           }
@@ -320,8 +344,8 @@ export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
           )}
 
           {status === 'done' && mp4BlobUrl && (
-            <div className="absolute inset-0 bg-black">
-              <video src={mp4BlobUrl} controls autoPlay className="w-full h-full object-contain" />
+            <div className="absolute inset-0 bg-black z-10 pointer-events-auto">
+              <video src={mp4BlobUrl} controls autoPlay playsInline className="w-full h-full object-contain" />
             </div>
           )}
         </div>
