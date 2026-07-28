@@ -12,7 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const DATASET_PATH = process.env.DATASET_PATH || 'B:\\Quran';
+const DATASET_PATH = process.env.DATASET_PATH || 'C:\\Users\\SAA\\Documents\\Quran';
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-dev-key';
 

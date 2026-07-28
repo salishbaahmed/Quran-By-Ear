@@ -191,6 +191,29 @@ app.get('/api/download', (req, res) => {
     const outputFile = path.join(TEMP_DIR, `out-${timestamp}.mp3`);
 
     let listContent = '';
+
+    const addPrefix = (prefixName) => {
+        const prefixPath = path.join(DATASET_PATH, reciter, prefixName);
+        if (fs.existsSync(prefixPath)) {
+            listContent += `file '${prefixPath.replace(/\\/g, '/')}'\n`;
+        }
+    };
+
+    if (sAyah === 1) {
+        if (surahNumber === 1 || surahNumber === 9) {
+            addPrefix('audhubillah.mp3');
+        } else {
+            const abPath = path.join(DATASET_PATH, reciter, 'Audhubillah_Bismillah.mp3');
+            if (fs.existsSync(abPath)) {
+                addPrefix('Audhubillah_Bismillah.mp3');
+            } else {
+                addPrefix('bismillah.mp3');
+            }
+        }
+    } else {
+        addPrefix('audhubillah.mp3');
+    }
+
     for (let a = sAyah; a <= eAyah; a++) {
         const filepath = path.join(DATASET_PATH, reciter, `${pad3(surahNumber)}${pad3(a)}.mp3`);
         if (!fs.existsSync(filepath)) {
