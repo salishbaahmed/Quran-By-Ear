@@ -22,7 +22,7 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
   useEffect(() => {
     if (surah) {
       setStartAyah(1);
-      setEndAyah(Math.min(7, surah.totalAyahs));
+      setEndAyah(surah.totalAyahs);
     }
   }, [surah]);
 

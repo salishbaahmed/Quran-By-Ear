@@ -61,7 +61,7 @@ export const SurahListScreen: React.FC<SurahListScreenProps> = ({
         {/* Surahs count bar */}
         <div className="flex items-center justify-between text-xs text-fg-muted font-medium mb-3 px-1">
           <span>{filteredSurahs.length} Surahs found</span>
-          <span>Tap to select reciter</span>
+          <span>Tap to select the surah</span>
         </div>
 
         {/* Surah List */}
