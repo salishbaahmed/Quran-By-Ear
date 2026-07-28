@@ -14,13 +14,14 @@ import { AyahRangeScreen } from './screens/AyahRangeScreen';
 import { DownloadingScreen } from './screens/DownloadingScreen';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { VideoGeneratorScreen } from './screens/VideoGeneratorScreen';
 
 export function App() {
   const [screen, setScreen] = useState<ScreenState>('splash');
 
   // Protected screens that require authentication
   const PROTECTED_SCREENS: ScreenState[] = [
-    'surah-list', 'reciter', 'ayah-range', 'downloading', 'library'
+    'surah-list', 'reciter', 'ayah-range', 'downloading', 'library', 'video-generator'
   ];
 
   // Route guard: redirects to login if navigating to a protected screen without a token
@@ -36,7 +37,10 @@ export function App() {
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
   const [selectedReciter, setSelectedReciter] = useState<string | null>(null);
   const [startAyah, setStartAyah] = useState<number>(1);
-  const [endAyah, setEndAyah] = useState<number>(7);
+  const [endAyah, setEndAyah] = useState<number>(1);
+  
+  // Library selection state
+  const [selectedVideoItem, setSelectedVideoItem] = useState<any>(null);
 
   // Audio player state persistent across screens
   const [currentPlaying, setCurrentPlaying] = useState<CurrentlyPlaying | null>(null);
@@ -124,11 +128,20 @@ export function App() {
             onNavigate={navigateSafe}
             onPlayItem={setCurrentPlaying}
             currentPlaying={currentPlaying}
+            onVideoItem={setSelectedVideoItem}
           />
         )}
 
         {screen === 'settings' && (
           <SettingsScreen onNavigate={navigateSafe} showToast={showToast} />
+        )}
+
+        {screen === 'video-generator' && (
+          <VideoGeneratorScreen
+            item={selectedVideoItem}
+            onNavigate={navigateSafe}
+            showToast={showToast}
+          />
         )}
 
         {/* Global Persistent Audio Player Bar */}

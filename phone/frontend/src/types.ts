@@ -7,7 +7,8 @@ export type ScreenState =
   | 'ayah-range'
   | 'downloading'
   | 'library'
-  | 'settings';
+  | 'settings'
+  | 'video-generator';
 
 export interface Surah {
   number: number;

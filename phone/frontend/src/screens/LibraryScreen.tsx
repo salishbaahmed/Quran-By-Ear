@@ -4,13 +4,14 @@ import { Header } from '../components/Header';
 import { getDownloadedFiles, getAllStats, getFileUrl } from '../lib/androidBridge';
 import { parseDownloadFilename } from '../lib/filenameParser';
 import { getSurahByNumber } from '../data/quranData';
-import { Play, Music, Headphones, Clock, RefreshCw, FolderOpen, Trash2 } from 'lucide-react';
+import { Play, Music, Headphones, Clock, RefreshCw, FolderOpen, Trash2, Video } from 'lucide-react';
 
 interface LibraryScreenProps {
   currentScreen: ScreenState;
   onNavigate: (screen: ScreenState) => void;
   onPlayItem: (item: CurrentlyPlaying) => void;
   currentPlaying: CurrentlyPlaying | null;
+  onVideoItem: (item: DownloadedItem) => void;
 }
 
 export const LibraryScreen: React.FC<LibraryScreenProps> = ({
@@ -18,6 +19,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   onNavigate,
   onPlayItem,
   currentPlaying,
+  onVideoItem,
 }) => {
   const [items, setItems] = useState<DownloadedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,6 +219,17 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                         aria-label="Play file"
                       >
                         <Play className="w-4 h-4 fill-current ml-0.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onVideoItem(item);
+                          onNavigate('video-generator');
+                        }}
+                        className="p-2.5 rounded-xl border bg-surface-2 text-blue-400 border-border hover:bg-blue-950/40 hover:border-blue-900/60 active-scale"
+                        aria-label="Create Video"
+                      >
+                        <Video className="w-4 h-4" />
                       </button>
                       <button
                         onClick={(e) => handleDelete(e, item.filename)}
