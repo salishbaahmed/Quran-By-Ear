@@ -196,7 +196,7 @@ app.get('/api/download', (req, res) => {
         if (!fs.existsSync(filepath)) {
             return res.status(404).json({ error: `Audio file not found for Ayah ${a} of Surah ${surahNumber}` });
         }
-        listContent += `file '${filepath.replace(/\\/g, '/')}'\\n`;
+        listContent += `file '${filepath.replace(/\\/g, '/')}'\n`;
     }
 
     fs.writeFileSync(listFile, listContent);
