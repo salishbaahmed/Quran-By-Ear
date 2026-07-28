@@ -25,15 +25,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
     setLoading(true);
 
     try {
-      // Hardcoded credentials bypass since backend is not ready
-      if (username.trim() === 'admin' && password === 'password123') {
-        // Mock token to satisfy the app's internal checks
-        localStorage.setItem('qbe_token', 'mock_hardcoded_token');
-        showToast('success', 'Logged in successfully!');
-        onNavigate('surah-list');
-      } else {
-        throw new Error('Invalid username or password. Use admin / password123');
-      }
+      await login(username.trim(), password);
+      showToast('success', 'Logged in successfully!');
+      onNavigate('surah-list');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Login failed.';
       setErrorMsg(message);
