@@ -8,7 +8,7 @@ interface AudioPlayerBarProps {
   onClose: () => void;
 }
 
-const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5, 2];
+const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const SLEEP_OPTIONS = [
   { label: 'Off', minutes: 0 },
   { label: '5m', minutes: 5 },
@@ -288,7 +288,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
               title="Playback speed"
             >
               <span className="flex items-center gap-0.5">
-                <Gauge className="w-3 h-3" />
+                <Gauge className="w-3 h-3 shrink-0" />
                 {speed}x
               </span>
             </button>
