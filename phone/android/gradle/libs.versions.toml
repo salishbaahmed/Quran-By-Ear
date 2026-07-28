@@ -11,6 +11,8 @@ androidxTestEspresso = "3.7.0"
 coroutines = "1.10.2"
 junit = "4.13.2"
 kotlin = "2.3.20"
+androidxMedia = "1.7.0"
+androidxLocalBroadcastManager = "1.1.0"
 nav3Core = "1.0.1"
 lifecycleViewmodelNav3 = "2.10.0"
 
@@ -36,6 +38,8 @@ kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-t
 androidx-navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "nav3Core" }
 androidx-navigation3-ui = { module = "androidx.navigation3:navigation3-ui", version.ref = "nav3Core" }
 androidx-lifecycle-viewmodel-navigation3 = { module = "androidx.lifecycle:lifecycle-viewmodel-navigation3", version.ref = "lifecycleViewmodelNav3" }
+androidx-media = { module = "androidx.media:media", version.ref = "androidxMedia" }
+androidx-localbroadcastmanager = { module = "androidx.localbroadcastmanager:localbroadcastmanager", version.ref = "androidxLocalBroadcastManager" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "androidGradlePlugin" }

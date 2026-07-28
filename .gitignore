@@ -8,7 +8,11 @@ build/
 server/database.sqlite
 server/temp/
 backend/database.sqlite
+backend/users.db
 backend/temp/
+
+# DuckDNS
+duckdns.log
 
 # Android / Gradle
 .gradle/

@@ -50,8 +50,9 @@ class PlaybackService : MediaBrowserServiceCompat() {
                     updatePlaybackState(false)
                 }
             })
-            setSessionToken(sessionToken)
         }
+        // Register the session token with MediaBrowserServiceCompat
+        sessionToken = mediaSession.sessionToken
 
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "QuranByEar::PlaybackWakeLock")

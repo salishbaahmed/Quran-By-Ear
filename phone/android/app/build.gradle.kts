@@ -97,4 +97,9 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // Media playback (MediaSessionCompat, MediaBrowserServiceCompat, MediaButtonReceiver)
+  implementation(libs.androidx.media)
+  // LocalBroadcastManager
+  implementation(libs.androidx.localbroadcastmanager)
 }
