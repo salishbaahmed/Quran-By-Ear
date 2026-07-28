@@ -1,6 +1,6 @@
 const STORAGE_KEY_BASE_URL = 'qbe_api_base_url';
 const STORAGE_KEY_TOKEN = 'qbe_token';
-export const DEFAULT_API_BASE_URL = 'http://DESKTOP-85K359Q.local:3000';
+export const DEFAULT_API_BASE_URL = 'http://quranbyear.duckdns.org:3000';
 
 export function getApiBaseUrl(): string {
   const stored = localStorage.getItem(STORAGE_KEY_BASE_URL);

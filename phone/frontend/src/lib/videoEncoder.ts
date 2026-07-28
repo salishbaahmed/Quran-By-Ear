@@ -7,7 +7,8 @@ export const loadFFmpeg = async (onProgress: (p: { ratio: number }) => void) => 
   if (ffmpeg) return ffmpeg;
 
   const instance = new FFmpeg();
-  instance.on('progress', onProgress);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  instance.on('progress', onProgress as any);
 
   const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
   
@@ -46,5 +47,9 @@ export const transcodeWebmToMp4 = async (
   await ffmpegInstance.deleteFile('input.webm');
   await ffmpegInstance.deleteFile('output.mp4');
   
-  return new Blob([data], { type: 'video/mp4' });
+  // Coerce to a plain ArrayBuffer so Blob constructor is satisfied (avoids SharedArrayBuffer mismatch)
+  const safeData = data instanceof Uint8Array
+    ? (data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength)
+    : data as BlobPart;
+  return new Blob([safeData], { type: 'video/mp4' });
 };

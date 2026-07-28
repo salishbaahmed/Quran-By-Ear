@@ -49,7 +49,7 @@ export function downloadAudio(url: string, filename: string, token: string): voi
 
 export function deleteAudio(filename: string): void {
   if (isNativeBridgeAvailable()) {
-    if (window.AndroidBridge!.deleteFile) {
+  if ('deleteFile' in window.AndroidBridge!) {
       window.AndroidBridge!.deleteFile(filename);
     } else {
       console.warn("deleteFile not implemented on native AndroidBridge yet");
