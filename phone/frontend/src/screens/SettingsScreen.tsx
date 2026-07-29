@@ -191,6 +191,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
         </div>
 
       </main>
+
+      {/* App version — update APP_VERSION on each release so you can always verify which APK is installed */}
+      <div className="fixed bottom-20 left-0 right-0 flex justify-center pointer-events-none">
+        <span className="text-[9px] text-fg-muted/40 font-mono tracking-widest">v1.3.0 · build 20260729</span>
+      </div>
     </div>
   );
 };

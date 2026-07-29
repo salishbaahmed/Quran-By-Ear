@@ -246,12 +246,13 @@ app.get('/api/download', (req, res) => {
     ffmpeg()
         .input(listFile)
         .inputOptions(['-f', 'concat', '-safe', '0'])
-        .outputOptions([
-            '-c', 'copy',
-            '-metadata', `title=Surah ${surahNumber} Ayahs ${sAyah}-${eAyah}`,
-            '-metadata', `artist=${displayReciterName}`,
-            '-metadata', `album=Quran By Ear`,
-        ])
+        // NOTE: fluent-ffmpeg splits option strings on spaces, so metadata
+        // values with spaces (e.g. reciter display names) must use the raw
+        // underscore form to avoid FFmpeg treating the second word as the output file.
+        .outputOptions(['-c', 'copy'])
+        .addOption('-metadata', `title=Surah_${surahNumber}_Ayahs_${sAyah}-${eAyah}`)
+        .addOption('-metadata', `artist=${reciter}`)
+        .addOption('-metadata', 'album=QuranByEar')
         .save(outputFile)
         .on('end', () => {
             res.download(outputFile, downloadFilename, (err) => {
