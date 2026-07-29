@@ -1,36 +1,51 @@
 import { AudioStat } from '../types';
 
+// ── Native bridge type declaration ────────────────────────────────────────────
+
 declare global {
   interface Window {
     AndroidBridge?: {
-      downloadAudio(url: string, filename: string, token: string): void;
-      getDownloadedFiles(): string; // returns JSON string array
-      getFileUrl(filename: string): string;
+      /** Enqueue a download via Android DownloadManager. filename = relative path e.g. "7/1/003.mp3" */
+      downloadAudio(url: string, filename: string): void;
+      /** Returns JSON array of relative paths for all downloaded files (recursive scan) */
+      getDownloadedFiles(): string;
+      /** Returns the file:// absolute URI for a relative path */
+      getFileUrl(relativePath: string): string;
+      /** Returns true if the file at relativePath exists on disk */
+      isFileDownloaded(relativePath: string): boolean;
       recordPlayStart(filename: string): void;
       updateStats(filename: string, timeListenedSeconds: number): void;
-      getAllStats(): string; // returns JSON string array of AudioStat
-      deleteFile(filename: string): void;
+      getAllStats(): string;
+      deleteFile(relativePath: string): void;
     };
   }
 }
 
-const MOCK_FILES_KEY = 'qbe_mock_files';
-const MOCK_STATS_KEY = 'qbe_mock_stats';
+// ── Dev mock keys ─────────────────────────────────────────────────────────────
 
-function isNativeBridgeAvailable(): boolean {
+const MOCK_FILES_KEY = 'qbe_mock_files_v2';
+const MOCK_STATS_KEY = 'qbe_mock_stats_v2';
+
+export function isNativeBridgeAvailable(): boolean {
   return typeof window !== 'undefined' && Boolean(window.AndroidBridge);
 }
 
-// Log warning once if using mock
 if (typeof window !== 'undefined' && !isNativeBridgeAvailable()) {
-  console.warn("AndroidBridge not found — using dev mock");
+  console.warn('AndroidBridge not found — using dev mock (v2)');
 }
 
-export function downloadAudio(url: string, filename: string, token: string): void {
+// ── Download ──────────────────────────────────────────────────────────────────
+
+/**
+ * Download a single ayah file.
+ * @param url    Full CDN URL of the MP3
+ * @param filename  Relative path e.g. "7/1/003.mp3" (becomes subfolder in Downloads/QuranByEar/)
+ */
+export function downloadAudio(url: string, filename: string): void {
   if (isNativeBridgeAvailable()) {
-    window.AndroidBridge!.downloadAudio(url, filename, token);
+    window.AndroidBridge!.downloadAudio(url, filename);
   } else {
-    console.log("[Dev Mock] downloadAudio requested:", { url, filename, token });
+    console.log('[Dev Mock] downloadAudio:', { url, filename });
     setTimeout(() => {
       try {
         const stored = localStorage.getItem(MOCK_FILES_KEY);
@@ -38,35 +53,34 @@ export function downloadAudio(url: string, filename: string, token: string): voi
         if (!files.includes(filename)) {
           files.push(filename);
           localStorage.setItem(MOCK_FILES_KEY, JSON.stringify(files));
-          console.log("[Dev Mock] File added to mock downloads:", filename);
+          console.log('[Dev Mock] File added:', filename);
         }
       } catch (err) {
-        console.error("[Dev Mock] Error saving mock file:", err);
+        console.error('[Dev Mock] Error saving file:', err);
       }
-    }, 1000);
+    }, 800);
   }
 }
 
-export function deleteAudio(filename: string): void {
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+export function deleteAudio(relativePath: string): void {
   if (isNativeBridgeAvailable()) {
-  if ('deleteFile' in window.AndroidBridge!) {
-      window.AndroidBridge!.deleteFile(filename);
-    } else {
-      console.warn("deleteFile not implemented on native AndroidBridge yet");
-    }
+    window.AndroidBridge!.deleteFile(relativePath);
   } else {
-    console.log("[Dev Mock] deleteAudio requested:", filename);
     try {
       const stored = localStorage.getItem(MOCK_FILES_KEY);
       let files: string[] = stored ? JSON.parse(stored) : [];
-      files = files.filter(f => f !== filename);
+      files = files.filter((f) => f !== relativePath);
       localStorage.setItem(MOCK_FILES_KEY, JSON.stringify(files));
-      console.log("[Dev Mock] File removed from mock downloads:", filename);
+      console.log('[Dev Mock] Deleted:', relativePath);
     } catch (err) {
-      console.error("[Dev Mock] Error deleting mock file:", err);
+      console.error('[Dev Mock] Error deleting file:', err);
     }
   }
 }
+
+// ── Query ─────────────────────────────────────────────────────────────────────
 
 export function getDownloadedFiles(): string[] {
   if (isNativeBridgeAvailable()) {
@@ -75,7 +89,7 @@ export function getDownloadedFiles(): string[] {
       const files = JSON.parse(jsonStr);
       return Array.isArray(files) ? files : [];
     } catch (e) {
-      console.error("Failed to parse getDownloadedFiles response from native bridge:", e);
+      console.error('Failed to parse getDownloadedFiles:', e);
       return [];
     }
   } else {
@@ -88,66 +102,65 @@ export function getDownloadedFiles(): string[] {
   }
 }
 
-export function getFileUrl(filename: string): string {
+export function isFileDownloaded(relativePath: string): boolean {
   if (isNativeBridgeAvailable()) {
-    return window.AndroidBridge!.getFileUrl(filename);
+    return window.AndroidBridge!.isFileDownloaded(relativePath);
   } else {
-    // Return a sample online audio file so HTML5 audio element works in desktop browser dev mode
-    return "https://download.quranicaudio.com/qdc/mishari_al_afasy/murattal/1.mp3";
+    const files = getDownloadedFiles();
+    return files.includes(relativePath);
   }
 }
 
+export function getFileUrl(relativePath: string): string {
+  if (isNativeBridgeAvailable()) {
+    return window.AndroidBridge!.getFileUrl(relativePath);
+  } else {
+    // Dev: return a public sample so the audio element can play
+    return 'https://audio.qurancdn.com/Alafasy/mp3/001001.mp3';
+  }
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
 export function recordPlayStart(filename: string): void {
   if (!filename) return;
-
   if (isNativeBridgeAvailable()) {
     window.AndroidBridge!.recordPlayStart(filename);
   } else {
-    console.log(`[Dev Mock] recordPlayStart for ${filename}`);
     try {
       const stored = localStorage.getItem(MOCK_STATS_KEY);
       const stats: AudioStat[] = stored ? JSON.parse(stored) : [];
-      const item = stats.find(s => s.filename === filename);
+      const item = stats.find((s) => s.filename === filename);
       if (item) {
         item.playCount += 1;
       } else {
-        stats.push({
-          filename,
-          playCount: 1,
-          totalTime: 0,
-        });
+        stats.push({ filename, playCount: 1, totalTime: 0 });
       }
       localStorage.setItem(MOCK_STATS_KEY, JSON.stringify(stats));
     } catch (err) {
-      console.error("[Dev Mock] Failed recording play start:", err);
+      console.error('[Dev Mock] recordPlayStart failed:', err);
     }
   }
 }
 
 export function updateStats(filename: string, secondsDelta: number): void {
-  const roundedSeconds = Math.max(0, Math.round(secondsDelta));
-  if (roundedSeconds === 0) return;
-
+  const rounded = Math.max(0, Math.round(secondsDelta));
+  if (rounded === 0) return;
   if (isNativeBridgeAvailable()) {
-    window.AndroidBridge!.updateStats(filename, roundedSeconds);
+    window.AndroidBridge!.updateStats(filename, rounded);
   } else {
-    console.log(`[Dev Mock] updateStats for ${filename}: +${roundedSeconds}s`);
     try {
       const stored = localStorage.getItem(MOCK_STATS_KEY);
       const stats: AudioStat[] = stored ? JSON.parse(stored) : [];
-      const item = stats.find(s => s.filename === filename);
+      const item = stats.find((s) => s.filename === filename);
       if (item) {
-        item.totalTime += roundedSeconds;
+        item.totalTime += rounded;
       } else {
-        stats.push({
-          filename,
-          playCount: 0,
-          totalTime: roundedSeconds,
-        });
+        stats.push({ filename, playCount: 0, totalTime: rounded });
       }
       localStorage.setItem(MOCK_STATS_KEY, JSON.stringify(stats));
     } catch (err) {
-      console.error("[Dev Mock] Failed updating mock stats:", err);
+      console.error('[Dev Mock] updateStats failed:', err);
     }
   }
 }
@@ -159,7 +172,7 @@ export function getAllStats(): AudioStat[] {
       const stats = JSON.parse(jsonStr);
       return Array.isArray(stats) ? stats : [];
     } catch (e) {
-      console.error("Failed to parse getAllStats response from native bridge:", e);
+      console.error('Failed to parse getAllStats:', e);
       return [];
     }
   } else {

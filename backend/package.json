@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@quranjs/api": "^3.4.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^13.0.1",
     "cors": "^2.8.6",

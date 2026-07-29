@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ScreenState, Surah, CurrentlyPlaying } from './types';
+import { ScreenState, Surah, Recitation, CurrentlyPlaying, DownloadGroup } from './types';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AudioPlayerBar } from './components/AudioPlayerBar';
 import { ThemeProvider } from './lib/ThemeContext';
@@ -11,7 +11,7 @@ import { SignupScreen } from './screens/SignupScreen';
 import { SurahListScreen } from './screens/SurahListScreen';
 import { ReciterScreen } from './screens/ReciterScreen';
 import { AyahRangeScreen } from './screens/AyahRangeScreen';
-import { DownloadingScreen } from './screens/DownloadingScreen';
+import { ConfirmScreen } from './screens/ConfirmScreen';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { VideoGeneratorScreen } from './screens/VideoGeneratorScreen';
@@ -19,12 +19,11 @@ import { VideoGeneratorScreen } from './screens/VideoGeneratorScreen';
 export function App() {
   const [screen, setScreen] = useState<ScreenState>('splash');
 
-  // Protected screens that require authentication
+  // Protected screens — require a Supabase session token
   const PROTECTED_SCREENS: ScreenState[] = [
-    'surah-list', 'reciter', 'ayah-range', 'downloading', 'library', 'video-generator'
+    'surah-list', 'reciter', 'ayah-range', 'confirm', 'library', 'settings', 'video-generator',
   ];
 
-  // Route guard: redirects to login if navigating to a protected screen without a token
   const navigateSafe = useCallback((target: ScreenState) => {
     if (PROTECTED_SCREENS.includes(target) && !getToken()) {
       setScreen('login');
@@ -33,26 +32,25 @@ export function App() {
     setScreen(target);
   }, []);
 
-  // Application selection states
+  // Selection flow state
   const [selectedSurah, setSelectedSurah] = useState<Surah | null>(null);
-  const [selectedReciter, setSelectedReciter] = useState<string | null>(null);
+  const [selectedRecitation, setSelectedRecitation] = useState<Recitation | null>(null);
   const [startAyah, setStartAyah] = useState<number>(1);
   const [endAyah, setEndAyah] = useState<number>(1);
-  
-  // Library selection state
-  const [selectedVideoItem, setSelectedVideoItem] = useState<any>(null);
 
-  // Audio player state persistent across screens
+  // Library video selection
+  const [selectedVideoGroup, setSelectedVideoGroup] = useState<DownloadGroup | null>(null);
+
+  // Persistent audio player state
   const [currentPlaying, setCurrentPlaying] = useState<CurrentlyPlaying | null>(null);
 
-  // Toast system state
+  // Toast system
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
   const showToast = useCallback((type: 'success' | 'error' | 'info', text: string) => {
     const id = Math.random().toString(36).substring(2, 9);
     const newToast: ToastMessage = { id, type, text };
     setToasts((prev) => [...prev, newToast]);
-
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 2000);
@@ -69,18 +67,17 @@ export function App() {
 
   return (
     <ThemeProvider>
-      {/* Toast Notifications — true full-viewport fixed overlay */}
+      {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Global Persistent Audio Player Bar — true full-viewport fixed */}
+      {/* Persistent Audio Player Bar */}
       <AudioPlayerBar
         currentPlaying={currentPlaying}
         onClose={() => setCurrentPlaying(null)}
       />
 
-      {/* App container — constrained to max-w-md */}
+      {/* App container */}
       <div className="islamic-bg min-h-screen text-fg font-sans relative max-w-md mx-auto border-x border-border/40 shadow-2xl">
-        {/* Screen Router */}
         {screen === 'splash' && (
           <SplashScreen onNavigate={navigateSafe} />
         )}
@@ -104,7 +101,7 @@ export function App() {
           <ReciterScreen
             surah={selectedSurah}
             onNavigate={navigateSafe}
-            onSelectReciter={setSelectedReciter}
+            onSelectReciter={setSelectedRecitation}
             showToast={showToast}
           />
         )}
@@ -112,19 +109,20 @@ export function App() {
         {screen === 'ayah-range' && (
           <AyahRangeScreen
             surah={selectedSurah}
-            reciter={selectedReciter}
+            recitation={selectedRecitation}
             onNavigate={navigateSafe}
             onSelectRange={handleSelectRange}
           />
         )}
 
-        {screen === 'downloading' && (
-          <DownloadingScreen
+        {screen === 'confirm' && (
+          <ConfirmScreen
             surah={selectedSurah}
-            reciter={selectedReciter}
+            recitation={selectedRecitation}
             startAyah={startAyah}
             endAyah={endAyah}
             onNavigate={navigateSafe}
+            onPlay={setCurrentPlaying}
             showToast={showToast}
           />
         )}
@@ -135,7 +133,7 @@ export function App() {
             onNavigate={navigateSafe}
             onPlayItem={setCurrentPlaying}
             currentPlaying={currentPlaying}
-            onVideoItem={setSelectedVideoItem}
+            onVideoItem={setSelectedVideoGroup}
           />
         )}
 
@@ -145,7 +143,7 @@ export function App() {
 
         {screen === 'video-generator' && (
           <VideoGeneratorScreen
-            item={selectedVideoItem}
+            group={selectedVideoGroup}
             onNavigate={navigateSafe}
             showToast={showToast}
           />

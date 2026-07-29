@@ -1,13 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ScreenState, Surah } from '../types';
-import { getReciters, Reciter } from '../lib/api';
+import { ScreenState, Surah, Recitation } from '../types';
+import { fetchRecitations } from '../lib/quranApi';
 import { Header } from '../components/Header';
-import { Search, RefreshCw, UserCheck, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Search, RefreshCw, UserCheck, ChevronRight, AlertTriangle, Mic } from 'lucide-react';
 
 interface ReciterScreenProps {
   surah: Surah | null;
   onNavigate: (screen: ScreenState) => void;
-  onSelectReciter: (reciter: string) => void;
+  onSelectReciter: (recitation: Recitation) => void;
   showToast: (type: 'success' | 'error' | 'info', text: string) => void;
 }
 
@@ -17,47 +17,37 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
   onSelectReciter,
   showToast,
 }) => {
-  const [reciters, setReciters] = useState<Reciter[]>([]);
+  const [recitations, setRecitations] = useState<Recitation[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchRecitersList = useCallback(async () => {
+  const fetchList = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const data = await getReciters(() => {
-        showToast('error', 'Session expired, please log in again.');
-        onNavigate('login');
-      });
-
-      // Normalize array of strings or objects, always return Reciter shape
-      const normalized: Reciter[] = (data as (string | Reciter)[]).map((r) => {
-        if (typeof r === 'string') return { id: r, name: r.replace(/_/g, ' ') };
-        return { id: r.id || r.name, name: r.name || r.id };
-      });
-
-      setReciters(normalized);
+      const data = await fetchRecitations();
+      setRecitations(data);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch reciters';
       setErrorMsg(msg);
+      showToast('error', msg);
     } finally {
       setLoading(false);
     }
-  }, [onNavigate, showToast]);
+  }, [showToast]);
 
   useEffect(() => {
-    fetchRecitersList();
-  }, [fetchRecitersList]);
+    fetchList();
+  }, [fetchList]);
 
   if (!surah) {
     onNavigate('surah-list');
     return null;
   }
 
-  const filteredReciters = reciters.filter((r) =>
-    r.name.toLowerCase().includes(searchQuery.toLowerCase().trim()) ||
-    r.id.toLowerCase().includes(searchQuery.toLowerCase().trim())
+  const filtered = recitations.filter((r) =>
+    r.reciter_name.toLowerCase().includes(searchQuery.toLowerCase().trim())
   );
 
   return (
@@ -71,59 +61,42 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
       />
 
       <main className="flex-1 px-4 pt-4 max-w-md mx-auto w-full">
-        {/* Selected Surah Summary Header */}
+        {/* Selected Surah Summary */}
         <div className="mb-4 p-4 rounded-2xl bg-surface-2/60 border border-border/60 flex items-center justify-between">
           <div>
-            <span className="text-[11px] font-bold tracking-wider text-accent uppercase">
-              Selected Surah
-            </span>
-            <h2 className="text-base font-bold text-fg">
-              {surah.number}. {surah.englishName}
-            </h2>
+            <span className="text-[11px] font-bold tracking-wider text-accent uppercase">Selected Surah</span>
+            <h2 className="text-base font-bold text-fg">{surah.number}. {surah.englishName}</h2>
+            {surah.englishTranslation && (
+              <p className="text-[11px] text-fg-muted">{surah.englishTranslation}</p>
+            )}
           </div>
           <div className="text-right">
-            <span className="font-arabic text-xl font-bold text-fg">
-              {surah.arabicName}
-            </span>
-            <p className="text-[11px] text-fg-muted font-medium">
-              {surah.totalAyahs} Ayahs total
-            </p>
+            <span className="font-arabic text-xl font-bold text-fg">{surah.arabicName}</span>
+            <p className="text-[11px] text-fg-muted font-medium">{surah.totalAyahs} Ayahs</p>
           </div>
         </div>
 
         {loading ? (
           <div className="text-center py-16">
             <div className="w-8 h-8 border-3 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-semibold text-fg">Fetching available reciters...</p>
+            <p className="text-sm font-semibold text-fg">Loading reciters from Quran.com...</p>
           </div>
         ) : errorMsg ? (
           <div className="text-center py-10 px-4 bg-surface rounded-2xl border border-red-900/60 shadow-lg">
             <AlertTriangle className="w-10 h-10 text-red-400 mx-auto mb-3" />
-            <h3 className="text-base font-bold text-fg mb-1">
-              Couldn't load reciters
-            </h3>
-            <p className="text-xs text-fg-muted mb-4 max-w-xs mx-auto">
-              {errorMsg}
-            </p>
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={fetchRecitersList}
-                className="w-full py-2.5 px-4 rounded-xl bg-accent hover:bg-accent-hover text-slate-950 font-bold text-xs flex items-center justify-center gap-2 active-scale"
-              >
-                <RefreshCw className="w-4 h-4" />
-                <span>Retry Loading</span>
-              </button>
-              <button
-                onClick={() => onNavigate('settings')}
-                className="w-full py-2.5 px-4 rounded-xl bg-surface-2 text-fg font-semibold text-xs border border-border hover:bg-surface-2/80 active-scale"
-              >
-                Check Backend URL in Settings
-              </button>
-            </div>
+            <h3 className="text-base font-bold text-fg mb-1">Couldn't load reciters</h3>
+            <p className="text-xs text-fg-muted mb-4 max-w-xs mx-auto">{errorMsg}</p>
+            <button
+              onClick={fetchList}
+              className="w-full py-2.5 px-4 rounded-xl bg-accent hover:bg-accent-hover text-slate-950 font-bold text-xs flex items-center justify-center gap-2 active-scale"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
           </div>
         ) : (
           <>
-            {/* Search Input */}
+            {/* Search */}
             <div className="relative mb-4">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-fg-muted">
                 <Search className="w-4 h-4" />
@@ -147,11 +120,11 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
 
             {/* Reciter List */}
             <div className="space-y-2">
-              {filteredReciters.map((reciter) => (
+              {filtered.map((recitation) => (
                 <div
-                  key={reciter.id}
+                  key={recitation.id}
                   onClick={() => {
-                    onSelectReciter(reciter.id); // Pass the folder ID for API calls
+                    onSelectReciter(recitation);
                     onNavigate('ayah-range');
                   }}
                   className="bg-surface hover:bg-surface-2 border border-border/80 rounded-xl p-3.5 flex items-center justify-between cursor-pointer active-scale transition-colors"
@@ -160,15 +133,21 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
                     <div className="w-9 h-9 rounded-xl bg-accent-light flex items-center justify-center text-accent shrink-0 border border-accent/20">
                       <UserCheck className="w-4 h-4" />
                     </div>
-                    <span className="text-sm font-semibold text-fg">
-                      {reciter.name} {/* Display the formatted name */}
-                    </span>
+                    <div>
+                      <span className="text-sm font-semibold text-fg">{recitation.reciter_name}</span>
+                      {recitation.style && (
+                        <p className="text-[10px] text-fg-muted flex items-center gap-1 mt-0.5">
+                          <Mic className="w-2.5 h-2.5" />
+                          {recitation.style}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-fg-muted" />
                 </div>
               ))}
 
-              {filteredReciters.length === 0 && (
+              {filtered.length === 0 && (
                 <div className="text-center py-10 bg-surface/50 rounded-2xl border border-border/60">
                   <p className="text-sm font-semibold text-fg">No reciters found</p>
                 </div>

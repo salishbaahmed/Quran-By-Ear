@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ScreenState } from '../types';
-import { login } from '../lib/api';
+import { supabase } from '../lib/supabase';
+import { setToken } from '../lib/api';
 import { Lock, User, LogIn, AlertCircle, Settings } from 'lucide-react';
 
 interface LoginScreenProps {
@@ -9,23 +10,28 @@ interface LoginScreenProps {
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password) {
-      setErrorMsg('Please enter both username and password.');
+    if (!email.trim() || !password) {
+      setErrorMsg('Please enter your email and password.');
       return;
     }
-
     setErrorMsg(null);
     setLoading(true);
-
     try {
-      await login(username.trim(), password);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (error) throw error;
+      if (data.session?.access_token) {
+        setToken(data.session.access_token);
+      }
       showToast('success', 'Logged in successfully!');
       onNavigate('surah-list');
     } catch (err: unknown) {
@@ -45,19 +51,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
             className="p-2 rounded-full bg-surface-2 border border-border text-fg-muted hover:text-fg hover:bg-surface-3 transition-colors active-scale"
             aria-label="Settings"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <Settings className="w-5 h-5" />
           </button>
         </div>
+
         <div className="flex justify-center mb-4 mt-8">
           <div className="w-16 h-16 rounded-2xl bg-accent-light flex items-center justify-center border border-accent/30 shadow-lg">
             <span className="text-3xl">📖</span>
           </div>
         </div>
-        <h2 className="text-center text-2xl font-bold text-fg tracking-tight">
-          Welcome Back
-        </h2>
+        <h2 className="text-center text-2xl font-bold text-fg tracking-tight">Welcome Back</h2>
         <p className="mt-1 text-center text-xs text-fg-muted">
-          Sign in to access your Quran recitation library
+          Sign in to access your Quran memorization library
         </p>
       </div>
 
@@ -72,28 +77,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
 
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div>
-              <label className="block text-xs font-semibold text-fg-muted mb-1.5">
-                Username
-              </label>
+              <label className="block text-xs font-semibold text-fg-muted mb-1.5">Email</label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-fg-muted">
                   <User className="w-4 h-4" />
                 </div>
                 <input
-                  type="text"
+                  type="email"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="Enter your username"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="your@email.com"
                   className="block w-full pl-10 pr-3 py-2.5 bg-surface-2 border border-border rounded-xl text-fg text-sm placeholder-fg-muted/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-fg-muted mb-1.5">
-                Password
-              </label>
+              <label className="block text-xs font-semibold text-fg-muted mb-1.5">Password</label>
               <div className="relative rounded-xl shadow-sm">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-fg-muted">
                   <Lock className="w-4 h-4" />
@@ -119,7 +120,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
               ) : (
                 <>
                   <LogIn className="w-4 h-4" />
-                  <span>Log in</span>
+                  <span>Log In</span>
                 </>
               )}
             </button>
@@ -135,14 +136,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigate, showToast 
                 Sign up
               </button>
             </p>
-            
-            <button
-              onClick={() => onNavigate('settings')}
-              className="inline-flex items-center gap-2 text-xs text-fg-muted hover:text-fg transition-colors"
-            >
-              <Settings className="w-4 h-4" />
-              <span>Server Settings</span>
-            </button>
           </div>
         </div>
       </div>

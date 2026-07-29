@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { ScreenState, Surah } from '../types';
+import { ScreenState, Surah, Recitation } from '../types';
 import { Header } from '../components/Header';
 import { ArrowRight, Minus, Plus, ListOrdered } from 'lucide-react';
 
 interface AyahRangeScreenProps {
   surah: Surah | null;
-  reciter: string | null;
+  recitation: Recitation | null;
   onNavigate: (screen: ScreenState) => void;
   onSelectRange: (start: number, end: number) => void;
 }
 
 export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
   surah,
-  reciter,
+  recitation,
   onNavigate,
   onSelectRange,
 }) => {
@@ -26,19 +26,18 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
     }
   }, [surah]);
 
-  if (!surah || !reciter) {
+  if (!surah || !recitation) {
     onNavigate('surah-list');
     return null;
   }
 
   const maxAyahs = surah.totalAyahs;
+  const selectedCount = endAyah - startAyah + 1;
 
   const handleStartChange = (val: number) => {
     const clamped = Math.max(1, Math.min(val, maxAyahs));
     setStartAyah(clamped);
-    if (clamped > endAyah) {
-      setEndAyah(clamped);
-    }
+    if (clamped > endAyah) setEndAyah(clamped);
   };
 
   const handleEndChange = (val: number) => {
@@ -51,14 +50,14 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
   const handleContinue = () => {
     if (!isValid) return;
     onSelectRange(startAyah, endAyah);
-    onNavigate('downloading');
+    onNavigate('confirm');
   };
 
   return (
     <div className="min-h-screen flex flex-col pb-24">
       <Header
-        title="Ayah Range Selection"
-        subtitle="Step 3: Select Ayah range"
+        title="Ayah Range"
+        subtitle="Step 3: Select range to memorize"
         onNavigate={onNavigate}
         showBack={true}
         onBack={() => onNavigate('reciter')}
@@ -73,8 +72,14 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
           </div>
           <div className="flex justify-between items-center text-xs text-fg-muted">
             <span>Reciter</span>
-            <span className="font-bold text-accent">{reciter}</span>
+            <span className="font-bold text-accent">{recitation.reciter_name}</span>
           </div>
+          {recitation.style && (
+            <div className="flex justify-between items-center text-xs text-fg-muted">
+              <span>Style</span>
+              <span className="font-semibold text-fg">{recitation.style}</span>
+            </div>
+          )}
           <div className="flex justify-between items-center text-xs text-fg-muted pt-1 border-t border-border/50">
             <span>Total Ayahs</span>
             <span className="font-bold text-fg">{maxAyahs}</span>
@@ -83,15 +88,21 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
 
         {/* Range Controls */}
         <div className="bg-surface rounded-2xl p-5 border border-border shadow-md space-y-6">
-          <h3 className="text-sm font-bold text-fg flex items-center gap-2">
-            <ListOrdered className="w-4 h-4 text-accent" />
-            Set Ayah Interval
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-fg flex items-center gap-2">
+              <ListOrdered className="w-4 h-4 text-accent" />
+              Set Ayah Interval
+            </h3>
+            {/* Live count badge */}
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-full bg-accent-light text-accent border border-accent/20">
+              {selectedCount} {selectedCount === 1 ? 'ayah' : 'ayahs'}
+            </span>
+          </div>
 
-          {/* Start Ayah Stepper */}
+          {/* Start Ayah */}
           <div>
             <label className="block text-xs font-semibold text-fg-muted mb-2">
-              Start Ayah (1 - {maxAyahs})
+              Start Ayah (1 – {maxAyahs})
             </label>
             <div className="flex items-center gap-3">
               <button
@@ -119,10 +130,10 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
             </div>
           </div>
 
-          {/* End Ayah Stepper */}
+          {/* End Ayah */}
           <div>
             <label className="block text-xs font-semibold text-fg-muted mb-2">
-              End Ayah ({startAyah} - {maxAyahs})
+              End Ayah ({startAyah} – {maxAyahs})
             </label>
             <div className="flex items-center gap-3">
               <button
@@ -152,27 +163,35 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
 
           {/* Quick Presets */}
           <div className="pt-2">
-            <span className="text-[11px] font-semibold text-fg-muted block mb-2">
-              Quick Shortcuts
-            </span>
+            <span className="text-[11px] font-semibold text-fg-muted block mb-2">Quick Shortcuts</span>
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => {
-                  setStartAyah(1);
-                  setEndAyah(maxAyahs);
-                }}
+                onClick={() => { setStartAyah(1); setEndAyah(maxAyahs); }}
                 className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
               >
-                Full Surah (1 - {maxAyahs})
+                Full Surah (1–{maxAyahs})
               </button>
               <button
-                onClick={() => {
-                  setStartAyah(1);
-                  setEndAyah(Math.min(10, maxAyahs));
-                }}
+                onClick={() => { setStartAyah(1); setEndAyah(Math.min(10, maxAyahs)); }}
                 className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
               >
                 First 10 Ayahs
+              </button>
+              <button
+                onClick={() => { setStartAyah(1); setEndAyah(Math.min(5, maxAyahs)); }}
+                className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
+              >
+                First 5 Ayahs
+              </button>
+              <button
+                onClick={() => {
+                  const half = Math.ceil(maxAyahs / 2);
+                  setStartAyah(1);
+                  setEndAyah(half);
+                }}
+                className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
+              >
+                First Half
               </button>
             </div>
           </div>
@@ -184,7 +203,7 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
           disabled={!isValid}
           className="w-full mt-6 py-3.5 px-4 rounded-xl bg-accent hover:bg-accent-hover text-slate-950 font-bold text-sm flex items-center justify-center gap-2 shadow-lg active-scale disabled:opacity-40"
         >
-          <span>Continue to Confirmation</span>
+          <span>Continue to Preview</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </main>
