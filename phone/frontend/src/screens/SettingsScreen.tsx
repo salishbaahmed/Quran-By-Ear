@@ -5,7 +5,7 @@ import { clearToken } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { getDownloadedFiles } from '../lib/androidBridge';
 import { parseDownloadedFilename } from '../lib/quranApi';
-import { Moon, Sun, Info, HardDrive } from 'lucide-react';
+import { Moon, Sun, Info, HardDrive, LogOut, Trash2 } from 'lucide-react';
 import { useTheme } from '../lib/ThemeContext';
 
 interface SettingsScreenProps {
@@ -13,7 +13,7 @@ interface SettingsScreenProps {
   showToast: (type: 'success' | 'error' | 'info', text: string) => void;
 }
 
-const APP_VERSION = 'v2.0.0-pre · build 20260730';
+const APP_VERSION = 'v1.0.0-rc1';
 const ADMIN_TAP_COUNT = 7;
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, showToast }) => {
@@ -40,6 +40,32 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
       onNavigate('admin');
     } else if (next >= 4) {
       showToast('info', `${ADMIN_TAP_COUNT - next} more taps for admin panel`);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      clearToken();
+      onNavigate('login');
+      showToast('success', 'Logged out successfully');
+    } catch (e) {
+      showToast('error', 'Failed to log out');
+    }
+  };
+
+  const handleClearDownloads = () => {
+    try {
+      // Calling native bridge to delete all files in QuranByEar
+      if (window.AndroidBridge && window.AndroidBridge.clearAllDownloads) {
+        window.AndroidBridge.clearAllDownloads();
+        showToast('success', 'All downloads cleared');
+        // Refresh local state by forcing a re-render or letting the user restart
+      } else {
+        showToast('error', 'Native bridge not available');
+      }
+    } catch (e) {
+      showToast('error', 'Failed to clear downloads');
     }
   };
 
@@ -130,6 +156,14 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
               <p className="text-[10px] text-fg-muted font-semibold mt-0.5">Ayahs saved</p>
             </div>
           </div>
+          
+          <button
+            onClick={handleClearDownloads}
+            className="w-full mt-2 py-2.5 rounded-xl border border-red-500/30 text-red-500 font-bold text-sm bg-red-500/5 active:bg-red-500/10 transition-colors flex items-center justify-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Clear All Downloads
+          </button>
         </div>
 
 
@@ -164,6 +198,16 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
               <span className="font-semibold text-fg">Supabase</span>
             </div>
           </div>
+        </div>
+
+        <div className="pt-4">
+          <button
+            onClick={handleLogout}
+            className="w-full py-3.5 rounded-2xl bg-surface border border-red-500/20 text-red-500 font-bold text-sm shadow-sm active:bg-red-500/5 transition-colors flex items-center justify-center gap-2"
+          >
+            <LogOut className="w-4 h-4" />
+            Log Out
+          </button>
         </div>
       </main>
     </div>

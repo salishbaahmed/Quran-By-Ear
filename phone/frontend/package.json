@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && copy /Y dist\\index.html ..\\android\\app\\src\\main\\assets\\index.html && xcopy /E /I /Y dist\\audio ..\\android\\app\\src\\main\\assets\\audio",
     "preview": "vite preview",
     "test": "vitest run"
   },

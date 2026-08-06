@@ -20,6 +20,7 @@ declare global {
       getAllStats(): string;
       deleteFile(relativePath: string): void;
       readTextFile(fileUrl: string): string;
+      clearAllDownloads(): void;
     };
   }
 }

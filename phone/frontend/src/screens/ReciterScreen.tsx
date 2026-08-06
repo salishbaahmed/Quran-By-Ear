@@ -135,12 +135,10 @@ export const ReciterScreen: React.FC<ReciterScreenProps> = ({
                     </div>
                     <div>
                       <span className="text-sm font-semibold text-fg">{recitation.reciter_name}</span>
-                      {recitation.style && (
-                        <p className="text-[10px] text-fg-muted flex items-center gap-1 mt-0.5">
-                          <Mic className="w-2.5 h-2.5" />
-                          {recitation.style}
-                        </p>
-                      )}
+                      <p className="text-[10px] text-fg-muted flex items-center gap-1 mt-0.5">
+                        <Mic className="w-2.5 h-2.5" />
+                        {recitation.style || 'Standard'}
+                      </p>
                     </div>
                   </div>
                   <ChevronRight className="w-4 h-4 text-fg-muted" />

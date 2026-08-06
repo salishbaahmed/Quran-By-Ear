@@ -87,21 +87,32 @@ export async function fetchVerseAudioUrls(
 
   const isSurah1Ayah1 = surahNum === 1 && startAyah === 1;
   if (includeBismillah && surahNum !== 9 && !isSurah1Ayah1) {
-    try {
-      const bismillahData = await apiGet<{ audio_files: Array<{ verse_key: string; url: string }> }>(
-        `/recitations/${recitationId}/by_chapter/1`
-      );
-      const bismillahFile = bismillahData.audio_files?.find(f => f.verse_key === '1:1');
-      if (bismillahFile) {
-        results.unshift({
-          verse_key: '1:1',
-          surahNum: 1,
-          ayahNum: 1,
-          url: VERSE_AUDIO_CDN + bismillahFile.url,
-        });
+    if (recitationId === 3) {
+      // Sudais custom local Bismillah
+      results.unshift({
+        verse_key: '1:1',
+        surahNum: 1,
+        ayahNum: 1,
+        url: './audio/bismillah_sudais.mp3',
+      });
+    } else {
+      try {
+        // Fallback to a clean studio Bismillah (AbdulBaset Murattal = ID 2) for all other reciters
+        const bismillahData = await apiGet<{ audio_files: Array<{ verse_key: string; url: string }> }>(
+          `/recitations/2/by_chapter/1`
+        );
+        const bismillahFile = bismillahData.audio_files?.find(f => f.verse_key === '1:1');
+        if (bismillahFile) {
+          results.unshift({
+            verse_key: '1:1',
+            surahNum: 1,
+            ayahNum: 1,
+            url: VERSE_AUDIO_CDN + bismillahFile.url,
+          });
+        }
+      } catch (e) {
+        console.warn("Failed to fetch Bismillah audio", e);
       }
-    } catch (e) {
-      console.warn("Failed to fetch Bismillah audio", e);
     }
   }
 
@@ -147,6 +158,7 @@ export async function fetchVerseTimingsAndText(
   const isSurah1Ayah1 = surahNum === 1 && startAyah === 1;
   if (includeBismillah && surahNum !== 9 && !isSurah1Ayah1) {
     try {
+      const bismillahRecId = recitationId === 3 ? 3 : 2;
       const bismillahData = await apiGet<{
         verses: Array<{
           verse_key: string;
@@ -154,16 +166,20 @@ export async function fetchVerseTimingsAndText(
           audio?: { url: string; segments: TimingSegment[] };
         }>;
       }>(
-        `/verses/by_chapter/1?audio=${recitationId}&fields=text_uthmani,verse_key&per_page=1&offset=0`
+        `/verses/by_chapter/1?audio=${bismillahRecId}&fields=text_uthmani,verse_key&per_page=1&offset=0`
       );
       const bismillahVerse = bismillahData.verses?.[0];
       if (bismillahVerse && bismillahVerse.verse_key === '1:1') {
+        const audioUrl = recitationId === 3 
+          ? './audio/bismillah_sudais.mp3' 
+          : (bismillahVerse.audio ? VERSE_AUDIO_CDN + bismillahVerse.audio.url : '');
+          
         allVerses.unshift({
           verse_key: '1:1',
           surahNum: 1,
           ayahNum: 1,
           text_uthmani: bismillahVerse.text_uthmani,
-          audioUrl: bismillahVerse.audio ? VERSE_AUDIO_CDN + bismillahVerse.audio.url : '',
+          audioUrl: audioUrl,
           segments: bismillahVerse.audio?.segments ?? [],
         });
       }

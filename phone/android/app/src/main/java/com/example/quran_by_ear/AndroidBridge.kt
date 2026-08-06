@@ -162,9 +162,36 @@ class AndroidBridge(private val context: Context) {
         current.listFiles()?.forEach { f ->
             if (f.isDirectory) {
                 collectMp3Files(root, f, result)
-            } else if (f.extension == "mp3") {
-                // Store as relative path from downloadDir root
-                result.add(f.relativeTo(root).path.replace('\\', '/'))
+            } else {
+                val relPath = f.relativeTo(root).path.replace('\\', '/')
+                // Auto-Heal: The new schema places files at exactly {reciterId}/{surahId}/{filename}.ext
+                // If a file is not nested exactly 2 directories deep, it's from the old schema. Delete it!
+                if (relPath.split('/').size != 3) {
+                    f.delete()
+                    dbHelper.deleteStats(relPath)
+                } else if (f.extension == "mp3") {
+                    result.add(relPath)
+                }
+            }
+        }
+    }
+
+    /**
+     * Wipes the entire download directory and all stats.
+     */
+    @JavascriptInterface
+    fun clearAllDownloads() {
+        downloadDir.deleteRecursively()
+        downloadDir.mkdirs()
+        
+        // Also wipe all stats to prevent zombies
+        val allStats = dbHelper.getAllStats()
+        for (i in 0 until allStats.length()) {
+            try {
+                val fn = allStats.getJSONObject(i).getString("filename")
+                dbHelper.deleteStats(fn)
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }
