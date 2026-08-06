@@ -34,8 +34,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // ── REPLACE THESE with your Supabase project values ──────────────────────────
-const SUPABASE_URL = 'https://YOUR_PROJECT_ID.supabase.co';
-const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+const SUPABASE_URL = 'https://vlfhtowpkyrtxesucdhj.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_eA4hcTWAl3yupyVL8MTlWQ_KzjgWsZq';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -54,21 +54,21 @@ export function getCurrentUserId(): string | null {
 
 /** Log a play event (fire-and-forget, non-blocking) */
 export async function logPlayEvent(
-  userId: string,
   surahNum: number,
-  reciterId: number,
-  startAyah: number,
-  endAyah: number,
-  durationSeconds: number,
+  ayahNum: number,
+  recitationId: number,
+  filename: string,
 ): Promise<void> {
   try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    
     await supabase.from('play_events').insert({
-      user_id: userId,
+      user_id: user.id,
       surah_num: surahNum,
-      reciter_id: reciterId,
-      start_ayah: startAyah,
-      end_ayah: endAyah,
-      duration_seconds: durationSeconds,
+      ayah_num: ayahNum,
+      recitation_id: recitationId,
+      filename: filename,
     });
   } catch {
     // Non-critical — silently fail if offline

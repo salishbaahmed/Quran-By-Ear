@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScreenState } from '../types';
 import { Header } from '../components/Header';
 import { clearToken } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { getDownloadedFiles } from '../lib/androidBridge';
-import { parseAyahFilename } from '../lib/quranApi';
-import { LogOut, ShieldAlert, Moon, Sun, Info, HardDrive } from 'lucide-react';
+import { parseDownloadedFilename } from '../lib/quranApi';
+import { Moon, Sun, Info, HardDrive } from 'lucide-react';
 import { useTheme } from '../lib/ThemeContext';
 
 interface SettingsScreenProps {
@@ -14,26 +14,36 @@ interface SettingsScreenProps {
 }
 
 const APP_VERSION = 'v2.0.0-pre · build 20260730';
+const ADMIN_TAP_COUNT = 7;
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, showToast }) => {
   const { isDark, toggleTheme } = useTheme();
+  const [versionTaps, setVersionTaps] = useState(0);
 
   // Compute storage info from downloads
   const downloadedFiles = getDownloadedFiles();
-  const parsedFiles = downloadedFiles.map(parseAyahFilename).filter(Boolean);
-  const uniqueSurahs = new Set(parsedFiles.map((f) => `${f!.recitationId}_${f!.surahNum}`)).size;
-  const totalAyahs = parsedFiles.length;
+  const parsedFiles = downloadedFiles.map(parseDownloadedFilename).filter(Boolean);
+  // Total surah downloads (including repeats)
+  const totalSurahDownloads = parsedFiles.length;
+  // Total ayahs saved = sum of (endAyah - startAyah + 1) per file
+  const totalAyahsSaved = parsedFiles.reduce((sum, f) => {
+    if (!f) return sum;
+    if (f.startAyah !== undefined && f.endAyah !== undefined) return sum + (f.endAyah - f.startAyah + 1);
+    return sum + 1;
+  }, 0);
 
-  const handleLogout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // Ignore errors — always clear local token
+  const handleVersionTap = () => {
+    const next = versionTaps + 1;
+    setVersionTaps(next);
+    if (next >= ADMIN_TAP_COUNT) {
+      setVersionTaps(0);
+      onNavigate('admin');
+    } else if (next >= 4) {
+      showToast('info', `${ADMIN_TAP_COUNT - next} more taps for admin panel`);
     }
-    clearToken();
-    showToast('info', 'Logged out successfully.');
-    onNavigate('login');
   };
+
+
 
   return (
     <div className="min-h-screen flex flex-col pb-24">
@@ -107,42 +117,21 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
             </div>
             <div>
               <h2 className="text-sm font-bold text-fg">Offline Storage</h2>
-              <p className="text-[11px] text-fg-muted">Files in Downloads/QuranByEar/</p>
+              <p className="text-[11px] text-fg-muted">Downloads/QuranByEar/</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-surface-2 rounded-xl p-3 border border-border text-center">
-              <p className="text-xl font-bold text-accent">{uniqueSurahs}</p>
+              <p className="text-xl font-bold text-accent">{totalSurahDownloads}</p>
               <p className="text-[10px] text-fg-muted font-semibold mt-0.5">Surahs saved</p>
             </div>
             <div className="bg-surface-2 rounded-xl p-3 border border-border text-center">
-              <p className="text-xl font-bold text-accent">{totalAyahs}</p>
-              <p className="text-[10px] text-fg-muted font-semibold mt-0.5">Ayah files</p>
+              <p className="text-xl font-bold text-accent">{totalAyahsSaved}</p>
+              <p className="text-[10px] text-fg-muted font-semibold mt-0.5">Ayahs saved</p>
             </div>
           </div>
         </div>
 
-        {/* ── Account & Session Card ── */}
-        <div className="bg-surface rounded-2xl p-5 border border-border shadow-md space-y-4">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-red-950/60 flex items-center justify-center text-red-400 border border-red-800/60">
-              <ShieldAlert className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-fg">Account Session</h2>
-              <p className="text-[11px] text-fg-muted">
-                Powered by Supabase Auth
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full py-3 px-4 rounded-xl bg-red-950/40 hover:bg-red-950/70 text-red-200 border border-red-800/70 font-bold text-xs flex items-center justify-center gap-2 active-scale transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Log Out of Quran-By-Ear</span>
-          </button>
-        </div>
 
         {/* ── App Info Card ── */}
         <div className="bg-surface rounded-2xl p-5 border border-border shadow-md space-y-3">
@@ -158,7 +147,13 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({ onNavigate, show
           <div className="space-y-2 text-xs">
             <div className="flex justify-between text-fg-muted">
               <span>Version</span>
-              <span className="font-mono font-bold text-fg">{APP_VERSION}</span>
+              <button
+                onClick={handleVersionTap}
+                className="font-mono font-bold text-fg active:opacity-60 select-none"
+              >
+                {APP_VERSION}
+                {versionTaps >= 4 && <span className="text-accent ml-1">({ADMIN_TAP_COUNT - versionTaps})</span>}
+              </button>
             </div>
             <div className="flex justify-between text-fg-muted">
               <span>Audio source</span>

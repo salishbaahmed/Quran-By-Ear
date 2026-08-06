@@ -10,6 +10,7 @@ export type ScreenState =
   | 'confirm'          // replaces 'downloading'
   | 'library'
   | 'settings'
+  | 'admin'
   | 'video-generator';
 
 // ── Surah data ───────────────────────────────────────────────────────────────
@@ -41,22 +42,15 @@ export interface AudioStat {
 
 // ── Playlist / Player ────────────────────────────────────────────────────────
 
-export interface PlaylistTrack {
-  url: string;           // CDN URL or file:// local URI
-  verseKey: string;      // e.g. "1:3"
-  ayahNum: number;
-}
-
 export interface CurrentlyPlaying {
   /** Human-readable title (e.g. "Al-Fatiha — Ayahs 1–7") */
   title: string;
   /** Reciter name */
   subtitle: string;
-  /** For single-track mode (legacy compat) */
+  /** Offline file path */
   filename?: string;
+  /** CDN URL or Blob URL */
   url?: string;
-  /** For playlist mode */
-  playlist?: PlaylistTrack[];
   /** Recitation metadata (for Supabase logging) */
   recitationId?: number;
   surahNum?: number;
@@ -67,31 +61,21 @@ export interface CurrentlyPlaying {
 // ── Downloaded items (new format) ────────────────────────────────────────────
 
 /**
- * Represents a single downloaded ayah file.
- * Stored filename format: "{recitationId}/{surahNum}/{ayahNum_padded}.mp3"
- * e.g. "7/1/003.mp3"
- */
-export interface DownloadedAyah {
-  filename: string;          // relative path used as key
-  localUrl: string;          // file:// absolute URI
-  recitationId: number;
-  surahNum: number;
-  ayahNum: number;
-  stats?: AudioStat;
-}
-
-/**
- * A group of downloaded ayahs for the same surah + reciter.
+ * A downloaded range of ayahs for the same surah + reciter.
  * Shown as one row in the library.
+ * Stored filename format: "{recitationId}/{surahNum}/{startAyah}-{endAyah}.mp3"
  */
 export interface DownloadGroup {
+  filename: string;
+  localUrl: string;
   recitationId: number;
   reciterName: string;
   surahNum: number;
   surah?: Surah;
-  ayahs: DownloadedAyah[];   // sorted ascending
-  totalPlayCount: number;
-  totalListenTime: number;   // seconds
+  startAyah: number;
+  endAyah: number;
+  ayahCount: number;
+  stats?: AudioStat;
 }
 
 // ── Legacy types (kept for VideoGeneratorScreen compatibility) ────────────────

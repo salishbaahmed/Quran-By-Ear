@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ScreenState, Surah, Recitation, CurrentlyPlaying, PlaylistTrack } from '../types';
+import { ScreenState, Surah, Recitation, CurrentlyPlaying } from '../types';
 import { Header } from '../components/Header';
-import { fetchVerseAudioUrls, buildAyahFilename } from '../lib/quranApi';
-import { downloadAudio, isFileDownloaded, getFileUrl } from '../lib/androidBridge';
+import { fetchVerseAudioUrls, buildGroupFilename } from '../lib/quranApi';
+import { downloadAndConcatenateAudio, isFileDownloaded, getFileUrl } from '../lib/androidBridge';
 import {
   Play, Download, CheckCircle2, Music, User, BookOpen,
   Wifi, HardDrive, Loader2, AlertTriangle
@@ -18,14 +18,6 @@ interface ConfirmScreenProps {
   showToast: (type: 'success' | 'error' | 'info', text: string) => void;
 }
 
-// Helper: check if all ayahs in a range are downloaded
-function checkAllDownloaded(recitationId: number, surahNum: number, start: number, end: number): boolean {
-  for (let a = start; a <= end; a++) {
-    if (!isFileDownloaded(buildAyahFilename(recitationId, surahNum, a))) return false;
-  }
-  return true;
-}
-
 export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
   surah,
   recitation,
@@ -36,17 +28,34 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
   showToast,
 }) => {
   const [loadingStream, setLoadingStream] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null); // null = not started
+  const [downloadProgress, setDownloadProgress] = useState<boolean>(false);
   const [allDownloaded, setAllDownloaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const ayahCount = endAyah - startAyah + 1;
+  const [includeBismillah, setIncludeBismillah] = useState(true);
 
-  // Check on mount if everything is already downloaded
+  const ayahCount = endAyah - startAyah + 1;
+  const groupFilename = surah && recitation ? buildGroupFilename(recitation.id, surah.number, startAyah, endAyah, includeBismillah) : '';
+  const showBismillahOption = surah?.number !== 9 && !(surah?.number === 1 && startAyah === 1);
+
+  // Check on mount if already downloaded
   useEffect(() => {
-    if (!surah || !recitation) return;
-    setAllDownloaded(checkAllDownloaded(recitation.id, surah.number, startAyah, endAyah));
-  }, [surah, recitation, startAyah, endAyah]);
+    if (!groupFilename) return;
+    setAllDownloaded(isFileDownloaded(groupFilename));
+  }, [groupFilename]);
+
+  // If download was initiated, poll until file exists
+  useEffect(() => {
+    if (!downloadProgress || !groupFilename) return;
+    const interval = setInterval(() => {
+      if (isFileDownloaded(groupFilename)) {
+        setAllDownloaded(true);
+        setDownloadProgress(false);
+        clearInterval(interval);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [downloadProgress, groupFilename]);
 
   if (!surah || !recitation) {
     onNavigate('surah-list');
@@ -59,31 +68,38 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
     setLoadingStream(true);
     setError(null);
     try {
-      const verses = await fetchVerseAudioUrls(recitation.id, surah.number, startAyah, endAyah);
-      if (verses.length === 0) throw new Error('No audio URLs found for this selection.');
+      let finalUrl = '';
 
-      // Build playlist — prefer local files when available
-      const tracks: PlaylistTrack[] = verses.map((v) => {
-        const localPath = buildAyahFilename(recitation.id, surah.number, v.ayahNum);
-        const localUrl = isFileDownloaded(localPath) ? getFileUrl(localPath) : null;
-        return {
-          url: localUrl ?? v.url,
-          verseKey: v.verse_key,
-          ayahNum: v.ayahNum,
-        };
-      });
+      if (allDownloaded) {
+        finalUrl = getFileUrl(groupFilename);
+      } else {
+        showToast('info', 'Buffering audio...');
+        const verses = await fetchVerseAudioUrls(recitation.id, surah.number, startAyah, endAyah, includeBismillah);
+        if (verses.length === 0) throw new Error('No audio URLs found for this selection.');
+
+        // Concatenate all mp3s into a single blob in JS for gapless streaming
+        const buffers = [];
+        for (const v of verses) {
+          const res = await fetch(v.url);
+          if (!res.ok) throw new Error(`Failed to load audio for Ayah ${v.ayahNum}`);
+          buffers.push(await res.arrayBuffer());
+        }
+        const blob = new Blob(buffers, { type: 'audio/mpeg' });
+        finalUrl = URL.createObjectURL(blob);
+      }
 
       const title = `${surah.englishName} (${startAyah}–${endAyah})`;
       onPlay({
         title,
         subtitle: recitation.reciter_name + (recitation.style ? ` · ${recitation.style}` : ''),
-        playlist: tracks,
+        url: finalUrl,
+        filename: groupFilename, // used for stats
         recitationId: recitation.id,
         surahNum: surah.number,
         startAyah,
         endAyah,
       });
-      showToast('info', `Playing ${ayahCount} ayahs from ${allDownloaded ? 'local storage' : 'CDN'}`);
+      showToast('success', `Playing ${ayahCount} ayahs gaplessly!`);
       onNavigate('library'); // go to library so the player bar is visible
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to load audio';
@@ -92,41 +108,28 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
     } finally {
       setLoadingStream(false);
     }
-  }, [recitation, surah, startAyah, endAyah, allDownloaded, ayahCount, onPlay, onNavigate, showToast]);
+  }, [recitation, surah, startAyah, endAyah, allDownloaded, groupFilename, ayahCount, includeBismillah, onPlay, onNavigate, showToast]);
 
   // ── Download ──────────────────────────────────────────────────────────────
 
   const handleDownload = useCallback(async () => {
-    if (downloadProgress !== null) return; // already running
+    if (downloadProgress) return;
     setError(null);
-    setDownloadProgress(0);
+    setDownloadProgress(true);
     try {
-      const verses = await fetchVerseAudioUrls(recitation.id, surah.number, startAyah, endAyah);
+      const verses = await fetchVerseAudioUrls(recitation.id, surah.number, startAyah, endAyah, includeBismillah);
       if (verses.length === 0) throw new Error('No audio URLs found for this selection.');
 
-      let enqueued = 0;
-      for (const v of verses) {
-        const filename = buildAyahFilename(recitation.id, surah.number, v.ayahNum);
-        if (!isFileDownloaded(filename)) {
-          downloadAudio(v.url, filename);
-        }
-        enqueued++;
-        setDownloadProgress(enqueued);
-        // Small stagger to avoid flooding DownloadManager
-        await new Promise((r) => setTimeout(r, 60));
-      }
-
-      showToast('success', `${verses.length} ayah downloads queued — check notification bar`);
-      setAllDownloaded(false); // will be true after all complete
+      const urls = verses.map(v => v.url);
+      downloadAndConcatenateAudio(urls, groupFilename);
+      showToast('success', `Downloading and combining ${ayahCount} ayahs in background...`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Download failed';
       setError(msg);
       showToast('error', msg);
-      setDownloadProgress(null);
+      setDownloadProgress(false);
     }
-  }, [recitation, surah, startAyah, endAyah, downloadProgress, showToast]);
-
-  const downloadDone = downloadProgress !== null && downloadProgress >= ayahCount;
+  }, [recitation, surah, startAyah, endAyah, downloadProgress, groupFilename, ayahCount, includeBismillah, showToast]);
 
   return (
     <div className="min-h-screen flex flex-col pb-24">
@@ -161,7 +164,7 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
               </span>
               <span className="font-bold text-fg bg-surface-2 px-2.5 py-1 rounded-lg border border-border">
                 Ayahs {startAyah} – {endAyah}
-                <span className="text-accent ml-1.5 font-semibold">({ayahCount} {ayahCount === 1 ? 'ayah' : 'ayahs'})</span>
+                <span className="text-accent ml-1.5 font-semibold">({ayahCount} ayahs)</span>
               </span>
             </div>
 
@@ -185,7 +188,7 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
               {allDownloaded ? (
                 <span className="flex items-center gap-1 text-emerald-400 font-bold">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  Saved offline
+                  Saved offline (single file)
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-fg-muted font-semibold">
@@ -194,6 +197,25 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
                 </span>
               )}
             </div>
+
+            {/* Bismillah Toggle */}
+            {showBismillahOption && (
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/40">
+                <span className="text-fg-muted flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-accent" />
+                  Include Bismillah
+                </span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={includeBismillah}
+                    onChange={(e) => setIncludeBismillah(e.target.checked)}
+                  />
+                  <div className="w-9 h-5 bg-surface-2 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-accent/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-accent border border-border"></div>
+                </label>
+              </div>
+            )}
           </div>
         </div>
 
@@ -211,18 +233,18 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
           {/* Stream Now */}
           <button
             onClick={handleStream}
-            disabled={loadingStream}
+            disabled={loadingStream || downloadProgress}
             className="w-full py-4 px-5 rounded-2xl bg-accent hover:bg-accent-hover text-slate-950 font-bold text-base flex items-center justify-center gap-3 shadow-xl active-scale disabled:opacity-60 transition-all"
           >
             {loadingStream ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Fetching audio...</span>
+                <span>Buffering gapless audio...</span>
               </>
             ) : (
               <>
                 <Play className="w-5 h-5 fill-slate-950" />
-                <span>Stream Now</span>
+                <span>Play Gapless Audio</span>
               </>
             )}
           </button>
@@ -230,39 +252,39 @@ export const ConfirmScreen: React.FC<ConfirmScreenProps> = ({
           {/* Download for Offline */}
           <button
             onClick={handleDownload}
-            disabled={downloadProgress !== null}
+            disabled={downloadProgress || allDownloaded}
             className={`w-full py-4 px-5 rounded-2xl font-bold text-base flex items-center justify-center gap-3 shadow-md active-scale transition-all border ${
-              downloadDone
+              allDownloaded
                 ? 'bg-emerald-950/40 border-emerald-800/60 text-emerald-300'
-                : downloadProgress !== null
+                : downloadProgress
                 ? 'bg-surface-2 border-border text-fg-muted opacity-70'
                 : 'bg-surface-2 border-border text-fg hover:bg-surface-2/80'
             }`}
           >
-            {downloadDone ? (
+            {allDownloaded ? (
               <>
                 <CheckCircle2 className="w-5 h-5" />
-                <span>All {ayahCount} ayahs queued!</span>
+                <span>Saved for Offline</span>
               </>
-            ) : downloadProgress !== null ? (
+            ) : downloadProgress ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin text-accent" />
-                <span>Queuing {downloadProgress}/{ayahCount}...</span>
+                <span>Downloading...</span>
               </>
             ) : (
               <>
                 <Download className="w-5 h-5" />
-                <span>Download for Offline ({ayahCount} {ayahCount === 1 ? 'file' : 'files'})</span>
+                <span>Download as Single File</span>
               </>
             )}
           </button>
 
           <p className="text-center text-xs text-fg-muted leading-relaxed px-2">
             Downloads go to <span className="font-mono text-accent">Downloads/QuranByEar/</span> on your device.
-            Track progress in your notification bar.
           </p>
         </div>
       </main>
     </div>
   );
 };
+

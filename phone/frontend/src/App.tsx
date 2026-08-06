@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ScreenState, Surah, Recitation, CurrentlyPlaying, DownloadGroup } from './types';
 import { ToastContainer, ToastMessage } from './components/Toast';
 import { AudioPlayerBar } from './components/AudioPlayerBar';
@@ -14,6 +14,7 @@ import { AyahRangeScreen } from './screens/AyahRangeScreen';
 import { ConfirmScreen } from './screens/ConfirmScreen';
 import { LibraryScreen } from './screens/LibraryScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { AdminScreen } from './screens/AdminScreen';
 import { VideoGeneratorScreen } from './screens/VideoGeneratorScreen';
 
 export function App() {
@@ -21,7 +22,7 @@ export function App() {
 
   // Protected screens — require a Supabase session token
   const PROTECTED_SCREENS: ScreenState[] = [
-    'surah-list', 'reciter', 'ayah-range', 'confirm', 'library', 'settings', 'video-generator',
+    'surah-list', 'reciter', 'ayah-range', 'confirm', 'library', 'settings', 'admin', 'video-generator',
   ];
 
   const navigateSafe = useCallback((target: ScreenState) => {
@@ -29,7 +30,28 @@ export function App() {
       setScreen('login');
       return;
     }
+    if (target === 'video-generator') {
+      setCurrentPlaying(null);
+    }
+    window.history.pushState({ screen: target }, '', '#' + target);
     setScreen(target);
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && e.state.screen) {
+        setScreen(e.state.screen as ScreenState);
+      } else {
+        const hash = window.location.hash.replace('#', '');
+        if (hash && hash !== 'splash') {
+          setScreen(hash as ScreenState);
+        } else {
+          setScreen('splash');
+        }
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Selection flow state
@@ -70,11 +92,13 @@ export function App() {
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Persistent Audio Player Bar */}
-      <AudioPlayerBar
-        currentPlaying={currentPlaying}
-        onClose={() => setCurrentPlaying(null)}
-      />
+      {/* Persistent Audio Player Bar — hidden on visualiser screen */}
+      {screen !== 'video-generator' && (
+        <AudioPlayerBar
+          currentPlaying={currentPlaying}
+          onClose={() => setCurrentPlaying(null)}
+        />
+      )}
 
       {/* App container */}
       <div className="islamic-bg min-h-screen text-fg font-sans relative max-w-md mx-auto border-x border-border/40 shadow-2xl">
@@ -139,6 +163,10 @@ export function App() {
 
         {screen === 'settings' && (
           <SettingsScreen onNavigate={navigateSafe} showToast={showToast} />
+        )}
+
+        {screen === 'admin' && (
+          <AdminScreen onNavigate={navigateSafe} showToast={showToast} />
         )}
 
         {screen === 'video-generator' && (

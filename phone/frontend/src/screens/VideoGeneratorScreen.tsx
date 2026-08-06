@@ -1,11 +1,14 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { DownloadGroup, ScreenState } from '../types';
 import { Header } from '../components/Header';
-import { fetchVerseTimingsAndText, VerseData, TimingSegment } from '../lib/quranApi';
-import { getFileUrl } from '../lib/androidBridge';
+import { fetchVerseTimingsAndText, TimingSegment } from '../lib/quranApi';
+import { readTextFile, recordPlayStart } from '../lib/androidBridge';
+import { getVerseText } from '../data/quranText';
+import { logPlayEvent } from '../lib/supabase';
 import {
-  Video, Download, Loader2, AlertTriangle, Play, Pause,
-  Type, Palette, CheckCircle2
+  Play, Pause, Loader2, AlertTriangle, RefreshCw,
+  Smartphone, ScreenShare, Layers, RotateCcw,
+  ChevronLeft, ChevronRight, Repeat
 } from 'lucide-react';
 
 interface VideoGeneratorScreenProps {
@@ -14,475 +17,575 @@ interface VideoGeneratorScreenProps {
   showToast: (type: 'success' | 'error' | 'info', text: string) => void;
 }
 
-// ── Canvas config ────────────────────────────────────────────────────────────
+// ── Canvas config ─────────────────────────────────────────────────────────────
 const CANVAS_W = 1080;
-const CANVAS_H = 1920; // 9:16 portrait
-const FONT_ARABIC = '"Scheherazade New", "Amiri", serif';
-const FONT_UI = '"Inter", sans-serif';
+const CANVAS_H = 1920;
+const ARABIC_FONT = `"Scheherazade New", "Amiri", "Noto Naskh Arabic", serif`;
+const UI_FONT = `"Inter", sans-serif`;
 
-interface WordHighlight {
-  verseIdx: number;
-  wordIdx: number;
+// Single clean dark theme
+const THEME = {
+  bg:        '#0c0c14',
+  bgGrad:    ['#0c0c16', '#141422'],
+  accent:    '#7fa8f5',
+  text:      '#f0ede0',
+  dimText:   '#4a4860',
+  highlight: '#7fa8f5',
+  pill:      'rgba(127,168,245,0.18)',
+};
+
+// ── Verse data ────────────────────────────────────────────────────────────────
+interface VerseEntry {
+  surahNum: number;
+  ayahNum:  number;
+  verseKey: string;
+  text:     string;
+  startMs:  number;
 }
 
-// Returns the currently active word based on audio time (ms)
-function getActiveWord(verses: VerseData[], currentMs: number): WordHighlight | null {
-  for (let vi = 0; vi < verses.length; vi++) {
-    for (const seg of verses[vi].segments) {
-      const [wordIdx, , startMs, endMs] = seg as TimingSegment;
-      if (currentMs >= startMs && currentMs <= endMs) {
-        return { verseIdx: vi, wordIdx };
-      }
+function getVerseStartMs(v: VerseEntry): number {
+  return v.startMs;
+}
+
+function getTotalDurationMs(verses: VerseEntry[]): number {
+  return 0; // Handled by audio.duration natively
+}
+
+function hexRgb(hex: string) {
+  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return r ? `${parseInt(r[1],16)},${parseInt(r[2],16)},${parseInt(r[3],16)}` : '255,255,255';
+}
+
+// ── Multi-line word wrapper ───────────────────────────────────────────────────
+interface WordLine { words: string[]; widths: number[]; lineW: number }
+
+function wrapWords(
+  ctx: CanvasRenderingContext2D,
+  words: string[],
+  maxWidth: number,
+  gap: number,
+): WordLine[] {
+  const lines: WordLine[] = [];
+  let cur: string[] = [];
+  let curWidths: number[] = [];
+  let curW = 0;
+
+  for (const word of words) {
+    const w = ctx.measureText(word).width;
+    if (curW + w + (cur.length > 0 ? gap : 0) > maxWidth && cur.length > 0) {
+      lines.push({ words: cur, widths: curWidths, lineW: curW });
+      cur = [word]; curWidths = [w]; curW = w;
+    } else {
+      if (cur.length > 0) curW += gap;
+      cur.push(word); curWidths.push(w); curW += w;
     }
   }
-  return null;
+  if (cur.length) lines.push({ words: cur, widths: curWidths, lineW: curW });
+  return lines;
 }
 
-// Get verse start time in ms
-function getVerseStartMs(verse: VerseData): number {
-  if (!verse.segments || verse.segments.length === 0) return 0;
-  return verse.segments[0][2];
-}
-
-// Get the total duration in ms for all verses
-function getTotalDurationMs(verses: VerseData[]): number {
-  if (verses.length === 0) return 0;
-  const last = verses[verses.length - 1];
-  if (!last.segments || last.segments.length === 0) return 0;
-  const lastSeg = last.segments[last.segments.length - 1];
-  return lastSeg[3]; // endMs of last segment
-}
-
-// ── Drawing function ─────────────────────────────────────────────────────────
+// ── Canvas draw ───────────────────────────────────────────────────────────────
 function drawFrame(
   ctx: CanvasRenderingContext2D,
-  verses: VerseData[],
+  verses: VerseEntry[],
   currentMs: number,
-  bgColor: string,
-  textColor: string,
-  highlightColor: string,
 ) {
-  ctx.fillStyle = bgColor;
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, 0, CANVAS_H);
+  bg.addColorStop(0, THEME.bgGrad[0]);
+  bg.addColorStop(1, THEME.bgGrad[1]);
+  ctx.fillStyle = bg;
   ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // Subtle top gradient header area
-  const grad = ctx.createLinearGradient(0, 0, 0, 280);
-  grad.addColorStop(0, 'rgba(20,20,40,0.7)');
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, CANVAS_W, 280);
+  // Top glow
+  const glow = ctx.createRadialGradient(CANVAS_W/2, 0, 0, CANVAS_W/2, 0, CANVAS_W * 0.75);
+  glow.addColorStop(0, THEME.accent + '14');
+  glow.addColorStop(1, 'transparent');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, CANVAS_W, 500);
 
-  // App label
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.font = `bold 36px ${FONT_UI}`;
+  // Watermark
+  ctx.font = `bold 40px ${UI_FONT}`;
   ctx.textAlign = 'center';
-  ctx.fillText('Quran By Ear', CANVAS_W / 2, 80);
+  ctx.fillStyle = THEME.accent + '55';
+  ctx.fillText('Quran By Ear', CANVAS_W / 2, 96);
 
-  const active = getActiveWord(verses, currentMs);
-
-  // Find current verse
-  let currentVerseIdx = 0;
+  // Current verse index
+  let curIdx = 0;
+  if (verses.length === 0) return;
   for (let i = 0; i < verses.length; i++) {
-    const startMs = getVerseStartMs(verses[i]);
-    if (currentMs >= startMs) currentVerseIdx = i;
+    if (currentMs >= getVerseStartMs(verses[i])) curIdx = i;
     else break;
   }
 
-  // Show a window of 3 verses: prev, current, next
-  const windowStart = Math.max(0, currentVerseIdx - 1);
-  const windowEnd = Math.min(verses.length - 1, currentVerseIdx + 1);
-  const visibleVerses = verses.slice(windowStart, windowEnd + 1);
+  const PADDING = 80;
+  const MAX_W   = CANVAS_W - PADDING * 2;
+  const GAP     = 28; // px between Arabic words
+  const CENTER_Y = CANVAS_H / 2;
 
-  const startY = CANVAS_H / 2 - 200;
-  const lineHeight = 160;
-
-  ctx.textAlign = 'right';
+  ctx.textAlign = 'center';
   ctx.direction = 'rtl';
 
-  for (let vi = 0; vi < visibleVerses.length; vi++) {
-    const verse = visibleVerses[vi];
-    const actualIdx = windowStart + vi;
-    const isCurrent = actualIdx === currentVerseIdx;
+  // Window: prev, current, next
+  const window3 = [-1, 0, 1]
+    .map(d => curIdx + d)
+    .filter(i => i >= 0 && i < verses.length);
 
-    const y = startY + vi * lineHeight;
-    const words = verse.text_uthmani.split(' ');
-    const opacity = isCurrent ? 1 : 0.35;
-
-    ctx.font = `${isCurrent ? 72 : 56}px ${FONT_ARABIC}`;
-
-    // Calculate total text width to center
-    let totalWidth = 0;
-    for (const w of words) totalWidth += ctx.measureText(w).width + 24;
-
-    // Draw word by word, highlight active word
-    let x = CANVAS_W / 2 + totalWidth / 2 - 16;
-    for (let wi = 0; wi < words.length; wi++) {
-      const word = words[wi];
-      const wWidth = ctx.measureText(word).width;
-      const isActiveWord =
-        active &&
-        active.verseIdx === actualIdx &&
-        active.wordIdx === wi;
-
-      if (isActiveWord) {
-        // Highlight background pill
-        ctx.save();
-        ctx.fillStyle = highlightColor + '33'; // 20% opacity bg
-        const pad = 16;
-        ctx.beginPath();
-        ctx.roundRect(x - wWidth - pad, y - 65, wWidth + pad * 2, 84, 16);
-        ctx.fill();
-        ctx.restore();
-        ctx.fillStyle = highlightColor;
-      } else {
-        ctx.fillStyle = `rgba(${hexToRgb(textColor)},${opacity})`;
-      }
-
-      ctx.fillText(word, x, y);
-      x -= wWidth + 24;
-    }
-
-    // Verse number badge
-    ctx.font = `bold 36px ${FONT_UI}`;
-    ctx.fillStyle = isCurrent ? highlightColor : `rgba(${hexToRgb(textColor)},0.25)`;
-    ctx.textAlign = 'left';
-    ctx.fillText(`${verse.surahNum}:${verse.ayahNum}`, 60, y - 8);
-    ctx.textAlign = 'right';
+  // First pass: measure line heights for current verse
+  let curLineCount = 1;
+  {
+    const v = verses[curIdx];
+    ctx.font = `86px ${ARABIC_FONT}`;
+    const wrapped = wrapWords(ctx, v.text.split(' '), MAX_W, GAP);
+    curLineCount = wrapped.length;
   }
 
-  // Bottom progress bar
-  const totalMs = getTotalDurationMs(verses);
-  const progress = totalMs > 0 ? currentMs / totalMs : 0;
-  ctx.fillStyle = 'rgba(255,255,255,0.15)';
-  ctx.fillRect(60, CANVAS_H - 100, CANVAS_W - 120, 8);
-  ctx.fillStyle = highlightColor;
-  ctx.fillRect(60, CANVAS_H - 100, (CANVAS_W - 120) * progress, 8);
+  const LINE_H_CUR  = 180; // px per line for current verse (increased for more gap)
+  const LINE_H_ADJ  = 150; // spacing between verse blocks
+  const curBlockH   = curLineCount * LINE_H_CUR;
+
+  // Calculate scrolling progress
+  const curVerseStart = getVerseStartMs(verses[curIdx]);
+  const nextVerseStart = curIdx + 1 < verses.length ? getVerseStartMs(verses[curIdx + 1]) : curVerseStart + 10000;
+  const curVerseDuration = nextVerseStart - curVerseStart;
+  const progress = curVerseDuration > 0 ? Math.min(1, Math.max(0, (currentMs - curVerseStart) / curVerseDuration)) : 0;
+
+  const MAX_BLOCK_H = CANVAS_H - 400; // max safe rendering height
+  const overflow = Math.max(0, curBlockH - MAX_BLOCK_H);
+
+  for (const vi of window3) {
+    const verse = verses[vi];
+    const isCurrent = vi === curIdx;
+    const offset = vi - curIdx;
+
+    let yBase: number;
+    if (offset === 0) {
+      if (overflow > 0) {
+        yBase = (CANVAS_H / 2) - (MAX_BLOCK_H / 2) - (overflow * progress);
+      } else {
+        yBase = CENTER_Y - curBlockH / 2;
+      }
+    } else if (offset === -1) {
+      const curTop = overflow > 0 ? (CANVAS_H / 2) - (MAX_BLOCK_H / 2) - (overflow * progress) : CENTER_Y - curBlockH / 2;
+      yBase = curTop - LINE_H_ADJ - 70;
+    } else {
+      const curBottom = overflow > 0 
+        ? ((CANVAS_H / 2) - (MAX_BLOCK_H / 2) - (overflow * progress)) + curBlockH 
+        : CENTER_Y + curBlockH / 2;
+      yBase = curBottom + LINE_H_ADJ - 30;
+    }
+
+    if (isCurrent) {
+      ctx.font = `86px ${ARABIC_FONT}`;
+      const words   = verse.text.split(' ');
+      const lines   = wrapWords(ctx, words, MAX_W, GAP);
+
+      ctx.fillStyle = `rgba(${hexRgb(THEME.text)},0.92)`;
+      
+      for (let li = 0; li < lines.length; li++) {
+        const line = lines[li];
+        const lineY = yBase + li * LINE_H_CUR + 86;
+        const lineText = line.words.join(' ');
+        
+        ctx.fillText(lineText, CANVAS_W / 2, lineY);
+        
+        if (li === lines.length - 1) {
+          ctx.save();
+          const exactW = ctx.measureText(lineText).width;
+          // Place badge to the left of the Arabic text (end of RTL line)
+          const badgeX = (CANVAS_W / 2) - (exactW / 2) - 70; 
+          ctx.font = `34px ${ARABIC_FONT}`;
+          ctx.fillStyle = THEME.accent + 'dd';
+          ctx.textAlign = 'center';
+          ctx.direction = 'ltr'; // Ensure numbers read left-to-right
+          ctx.fillText(`﴿${verse.surahNum}:${verse.ayahNum}﴾`, badgeX, lineY);
+          ctx.restore();
+        }
+      }
+
+    } else {
+      // Adjacent verse — dim, single line, truncated
+      ctx.font = `56px ${ARABIC_FONT}`;
+      ctx.fillStyle = `rgba(${hexRgb(THEME.text)},0.22)`;
+      const truncated = verse.text.length > 60 ? verse.text.slice(0, 60) + '…' : verse.text;
+      ctx.fillText(truncated, CANVAS_W / 2, yBase + 56, MAX_W);
+    }
+  }
+
+  ctx.direction = 'ltr';
 }
 
-function hexToRgb(hex: string): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}`
-    : '255,255,255';
-}
+// ── Speed options ─────────────────────────────────────────────────────────────
+const SPEEDS = [0.5, 0.75, 1, 1.25] as const;
+type Speed = typeof SPEEDS[number];
 
-// ── Component ────────────────────────────────────────────────────────────────
-
-const THEMES = [
-  { name: 'Dark', bg: '#0f0f1a', text: '#f1f0ea', highlight: '#a3c4f3' },
-  { name: 'Deep Green', bg: '#0a1a0f', text: '#e8f5e9', highlight: '#69f0ae' },
-  { name: 'Midnight', bg: '#12111f', text: '#e8e8ff', highlight: '#c792ea' },
-  { name: 'Warm', bg: '#1a1008', text: '#fff8e7', highlight: '#ffd166' },
-];
-
+// ── Component ─────────────────────────────────────────────────────────────────
 export const VideoGeneratorScreen: React.FC<VideoGeneratorScreenProps> = ({
   group,
   onNavigate,
   showToast,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const animFrameRef = useRef<number | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
+  const audioRef  = useRef<HTMLAudioElement>(null);
+  const rafRef    = useRef<number | null>(null);
 
-  const [verses, setVerses] = useState<VerseData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [previewing, setPreviewing] = useState(false);
-  const [recording, setRecording] = useState(false);
-  const [recorded, setRecorded] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [selectedTheme, setSelectedTheme] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [verses,      setVerses]      = useState<VerseEntry[]>([]);
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
+  const [isPlaying,   setIsPlaying]   = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration,    setDuration]    = useState(0);
+  const [speed,       setSpeed]       = useState<Speed>(1);
+  const [loop,        setLoop]        = useState(false);
+  const [showTip,     setShowTip]     = useState(true);
+  const playStartRecordedRef = useRef<boolean>(false);
 
-  const theme = THEMES[selectedTheme];
-
-  // Load verse data on mount
-  useEffect(() => {
+  // ── Load timings ────────────────────────────────────────────────────────────
+  const loadVerses = useCallback(async () => {
     if (!group) return;
-    const startAyah = group.ayahs[0]?.ayahNum ?? 1;
-    const endAyah = group.ayahs[group.ayahs.length - 1]?.ayahNum ?? 1;
-    setLoading(true);
-    setError(null);
-    fetchVerseTimingsAndText(group.recitationId, group.surahNum, startAyah, endAyah)
-      .then(setVerses)
-      .catch((e) => setError(e.message ?? 'Failed to load verse timings'))
-      .finally(() => setLoading(false));
+    const { startAyah, endAyah, surahNum, recitationId, localUrl } = group;
+    setLoading(true); setError(null);
+    try {
+      const includeBism = !localUrl?.includes('_nobism.mp3');
+      const data = await fetchVerseTimingsAndText(recitationId, surahNum, startAyah, endAyah, includeBism);
+      
+      let indexDurations: number[] = [];
+      if (localUrl) {
+        try {
+          const indexUrl = localUrl.replace('.mp3', '.json');
+          const jsonText = readTextFile(indexUrl);
+          if (jsonText) {
+            indexDurations = JSON.parse(jsonText);
+          }
+        } catch (e) {
+          console.warn("Could not parse index file", e);
+        }
+      }
+
+      let cumulativeMs = 0;
+      const built: VerseEntry[] = data.map((v, i) => {
+        const start = cumulativeMs;
+        const duration = indexDurations[i] ?? 5000;
+        
+        const entry: VerseEntry = {
+          surahNum: v.surahNum, ayahNum: v.ayahNum, verseKey: v.verse_key,
+          text: getVerseText(v.surahNum, v.ayahNum) || v.text_uthmani,
+          startMs: start,
+        };
+        
+        cumulativeMs += duration;
+        return entry;
+      });
+      setVerses(built);
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) drawFrame(ctx, built, 0);
+      }
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load verse timings');
+    } finally {
+      setLoading(false);
+    }
   }, [group]);
 
-  if (!group) {
-    onNavigate('library');
-    return null;
-  }
+  useEffect(() => { loadVerses(); }, [loadVerses]);
 
-  const startAyah = group.ayahs[0]?.ayahNum ?? 1;
-  const endAyah = group.ayahs[group.ayahs.length - 1]?.ayahNum ?? 1;
-  const surahName = group.surah?.englishName ?? `Surah ${group.surahNum}`;
+  // ── Animation loop ──────────────────────────────────────────────────────────
+  const stopAnimate = useCallback(() => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+  }, []);
 
-  // First local audio file for the group
-  const firstLocalUrl = group.ayahs[0] ? getFileUrl(group.ayahs[0].filename) : null;
-
-  // ── Animate canvas ──
   const animate = useCallback(() => {
     const canvas = canvasRef.current;
-    const audio = audioRef.current;
-    if (!canvas || !audio || verses.length === 0) return;
-
+    const audio  = audioRef.current;
+    if (!canvas || !audio || !verses.length) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    drawFrame(ctx, verses, audio.currentTime * 1000);
+    setCurrentTime(audio.currentTime);
+    rafRef.current = requestAnimationFrame(animate);
+  }, [verses]);
 
-    const currentMs = audio.currentTime * 1000;
-    drawFrame(ctx, verses, currentMs, theme.bg, theme.text, theme.highlight);
-    setProgress(audio.duration > 0 ? audio.currentTime / audio.duration : 0);
+  useEffect(() => stopAnimate, [stopAnimate]);
 
-    animFrameRef.current = requestAnimationFrame(animate);
-  }, [verses, theme]);
+  if (!group) { onNavigate('library'); return null; }
+  const { startAyah, endAyah, surahNum } = group;
+  const surahName = group.surah?.englishName ?? `Surah ${surahNum}`;
 
-  const stopAnimate = () => {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current);
-      animFrameRef.current = null;
-    }
-  };
-
-  // ── Preview ──
-  const handlePreview = () => {
+  // ── Controls ────────────────────────────────────────────────────────────────
+  const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio || !firstLocalUrl) return;
-    if (previewing) {
-      audio.pause();
-      stopAnimate();
-      setPreviewing(false);
+    if (!audio || !group.localUrl) return;
+    if (!audio.src || audio.src === window.location.href) audio.src = group.localUrl;
+    if (isPlaying) {
+      audio.pause(); stopAnimate(); setIsPlaying(false);
     } else {
-      audio.src = firstLocalUrl;
-      audio.play().catch(console.error);
-      setPreviewing(true);
-      animFrameRef.current = requestAnimationFrame(animate);
+      audio.play()
+        .then(() => { 
+          setIsPlaying(true); 
+          rafRef.current = requestAnimationFrame(animate); 
+          if (!playStartRecordedRef.current) {
+            recordPlayStart(group.localUrl ?? '');
+            logPlayEvent(group.surahNum, group.startAyah, group.recitationId, group.localUrl ?? '');
+            playStartRecordedRef.current = true;
+          }
+        })
+        .catch((e: Error) => showToast('error', 'Could not play: ' + e.message));
     }
   };
 
-  // ── Record ──
-  const handleRecord = async () => {
-    if (!canvasRef.current || !audioRef.current || !firstLocalUrl || verses.length === 0) return;
-    setRecording(true);
-    setRecorded(false);
-    chunksRef.current = [];
-
-    try {
-      const canvas = canvasRef.current;
-      const audio = audioRef.current;
-      audio.src = firstLocalUrl;
-
-      // Get streams
-      const canvasStream = canvas.captureStream(30);
-      const audioCtx = new AudioContext();
-      const source = audioCtx.createMediaElementSource(audio);
-      const dest = audioCtx.createMediaStreamDestination();
-      source.connect(dest);
-      source.connect(audioCtx.destination);
-
-      const combined = new MediaStream([
-        ...canvasStream.getVideoTracks(),
-        ...dest.stream.getAudioTracks(),
-      ]);
-
-      const recorder = new MediaRecorder(combined, {
-        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ? 'video/webm;codecs=vp9'
-          : 'video/webm',
-      });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `QuranByEar_${surahName.replace(/\s+/g, '_')}_${startAyah}-${endAyah}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setRecording(false);
-        setRecorded(true);
-        stopAnimate();
-        showToast('success', 'Video exported! Check your Downloads folder.');
-      };
-
-      recorder.start(100);
-      audio.play();
-      animFrameRef.current = requestAnimationFrame(animate);
-
-      audio.onended = () => {
-        recorder.stop();
-        audioCtx.close();
-      };
-    } catch (err: unknown) {
-      console.error(err);
-      setError(err instanceof Error ? err.message : 'Recording failed');
-      setRecording(false);
-      showToast('error', 'Recording failed. Try the preview first.');
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseFloat(e.target.value);
+    if (audioRef.current) {
+      audioRef.current.currentTime = val;
+      setCurrentTime(val);
+      if (!isPlaying && verses.length) {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) drawFrame(ctx, verses, val * 1000);
+      }
     }
+  };
+
+  const handleEnded = () => {
+    if (!loop) {
+      setIsPlaying(false); stopAnimate(); setCurrentTime(0);
+      const ctx = canvasRef.current?.getContext('2d');
+      if (ctx && verses.length) drawFrame(ctx, verses, audioRef.current?.duration ? audioRef.current.duration * 1000 : 0);
+    }
+    // if loop=true, the audio element's own loop attribute handles restart
+  };
+
+  const handleSpeedChange = (s: Speed) => {
+    setSpeed(s);
+    if (audioRef.current) audioRef.current.playbackRate = s;
+  };
+
+  const handleLoopToggle = () => {
+    const next = !loop;
+    setLoop(next);
+    if (audioRef.current) audioRef.current.loop = next;
+  };
+
+  const handleRestart = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      setCurrentTime(0);
+      if (!isPlaying && verses.length) {
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) drawFrame(ctx, verses, 0);
+      }
+    }
+  };
+
+  const findPrevVerse = (sec: number): VerseEntry | undefined => {
+    let res: VerseEntry | undefined;
+    for (const v of verses) {
+      if (getVerseStartMs(v) / 1000 < sec - 0.5) res = v; else break;
+    }
+    return res;
+  };
+
+  const fmt = (s: number) => {
+    if (!isFinite(s) || s < 0) return '0:00';
+    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   };
 
   return (
-    <div className="min-h-screen flex flex-col pb-24">
+    <div className="min-h-screen flex flex-col pb-6 bg-[#0c0c14]">
       <Header
-        title="Video Generator"
-        subtitle={`${surahName} · Ayahs ${startAyah}–${endAyah}`}
+        title="Verse Visualiser"
+        subtitle={`${surahName} · ${startAyah}–${endAyah}`}
         onNavigate={onNavigate}
-        showBack={true}
-        onBack={() => onNavigate('library')}
+        showBack
+        onBack={() => { stopAnimate(); audioRef.current?.pause(); onNavigate('library'); }}
+        showNavIcons={false}
       />
 
-      <main className="flex-1 px-4 pt-4 max-w-md mx-auto w-full space-y-4">
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        src={group.localUrl || undefined}
+        loop={loop}
+        onLoadedMetadata={() => setDuration(audioRef.current?.duration ?? 0)}
+        onEnded={handleEnded}
+        onPause={() => { setIsPlaying(false); stopAnimate(); }}
+      />
 
-        {/* Loading state */}
-        {loading && (
-          <div className="text-center py-10">
-            <Loader2 className="w-8 h-8 animate-spin text-accent mx-auto mb-3" />
-            <p className="text-sm font-semibold text-fg">Loading verse timings from Quran.com...</p>
-          </div>
-        )}
+      <main className="flex-1 px-3 pt-3 max-w-md mx-auto w-full space-y-3">
 
-        {error && (
-          <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/60 flex items-start gap-2.5">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-red-200">{error}</p>
-          </div>
-        )}
+        {/* ── Canvas ──────────────────────────────────────────────────────── */}
+        <div className="relative w-full overflow-hidden rounded-3xl border border-white/8 shadow-2xl"
+          style={{ paddingBottom: '177.78%' }}>
+          <canvas ref={canvasRef} width={CANVAS_W} height={CANVAS_H}
+            className="absolute inset-0 w-full h-full" />
 
-        {!loading && verses.length > 0 && (
-          <>
-            {/* Canvas preview (9:16 scaled down) */}
-            <div className="relative w-full" style={{ paddingBottom: '177.78%' }}>
-              <canvas
-                ref={canvasRef}
-                width={CANVAS_W}
-                height={CANVAS_H}
-                className="absolute inset-0 w-full h-full rounded-2xl border border-border shadow-2xl"
-              />
-              {!previewing && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center border border-white/20">
-                    <Play className="w-7 h-7 text-white ml-1" />
-                  </div>
-                </div>
-              )}
-              {(previewing || recording) && (
-                <div className="absolute bottom-3 left-3 right-3">
-                  <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-accent rounded-full transition-all duration-100"
-                      style={{ width: `${progress * 100}%` }}
-                    />
-                  </div>
-                </div>
-              )}
+          {loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0c0c14]/90">
+              <Loader2 className="w-9 h-9 animate-spin mb-3 text-[#7fa8f5]" />
+              <p className="text-sm font-semibold text-white/80">Loading verse timings…</p>
+            </div>
+          )}
+
+          {error && !loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-[#0c0c14]/90">
+              <AlertTriangle className="w-9 h-9 mb-3 text-red-400" />
+              <p className="text-sm font-bold text-red-300 text-center mb-1">Failed to load timings</p>
+              <p className="text-xs text-white/40 text-center mb-4">{error}</p>
+              <button onClick={loadVerses}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-[#7fa8f5] border border-[#7fa8f5]/40 bg-[#7fa8f5]/10 flex items-center gap-2 active-scale">
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          )}
+
+          {!group.localUrl && !loading && !error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-[#0c0c14]/90">
+              <AlertTriangle className="w-8 h-8 mb-2 text-amber-400" />
+              <p className="text-sm font-bold text-amber-300">No offline audio</p>
+              <p className="text-xs text-white/40 text-center mt-1">Download this range from the Confirm screen first.</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── Controls ────────────────────────────────────────────────────── */}
+        {!loading && !error && verses.length > 0 && (
+          <div className="rounded-2xl border border-white/8 bg-[#131320] p-4 space-y-4">
+
+            {/* Progress scrubber */}
+            <div className="flex items-center gap-2.5">
+              <span className="text-[11px] font-mono text-white/35 w-8 text-right shrink-0">
+                {fmt(currentTime)}
+              </span>
+              <input type="range" min={0} max={duration || 100} step={0.1} value={currentTime}
+                onChange={handleSeek}
+                className="flex-1 h-1 rounded-full appearance-none cursor-pointer accent-[#7fa8f5]" />
+              <span className="text-[11px] font-mono text-white/35 w-8 shrink-0">
+                {fmt(duration)}
+              </span>
             </div>
 
-            {/* Hidden audio element */}
-            <audio ref={audioRef} onEnded={() => { setPreviewing(false); stopAnimate(); }} />
+            {/* Main playback row */}
+            <div className="flex items-center justify-between">
 
-            {/* Theme selector */}
-            <div className="bg-surface rounded-2xl p-4 border border-border space-y-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-fg">
-                <Palette className="w-4 h-4 text-accent" />
-                Background Theme
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                {THEMES.map((t, i) => (
-                  <button
-                    key={t.name}
-                    onClick={() => setSelectedTheme(i)}
-                    className={`rounded-xl p-2.5 border text-xs font-bold text-center transition-all active-scale ${
-                      selectedTheme === i
-                        ? 'border-accent ring-1 ring-accent'
-                        : 'border-border hover:border-accent/40'
-                    }`}
-                    style={{ backgroundColor: t.bg, color: t.text }}
-                  >
-                    {t.name}
+              {/* Prev verse */}
+              <button onClick={() => {
+                  const audio = audioRef.current;
+                  if (!audio || !verses.length) return;
+                  const prev = findPrevVerse(audio.currentTime);
+                  const val = prev ? getVerseStartMs(prev) / 1000 : 0;
+                  audio.currentTime = val;
+                  setCurrentTime(val);
+                  if (!isPlaying) {
+                    const ctx = canvasRef.current?.getContext('2d');
+                    if (ctx) drawFrame(ctx, verses, val * 1000);
+                  }
+                }}
+                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 active-scale text-white/60"
+                title="Previous verse">
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+
+              {/* Restart */}
+              <button onClick={handleRestart}
+                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 active-scale text-white/60"
+                title="Restart">
+                <RotateCcw className="w-4 h-4" />
+              </button>
+
+              {/* Play / Pause */}
+              <button onClick={togglePlay} disabled={!group.localUrl}
+                className="w-14 h-14 rounded-full bg-[#7fa8f5] flex items-center justify-center shadow-xl active-scale disabled:opacity-40 shrink-0">
+                {isPlaying
+                  ? <Pause className="w-6 h-6 fill-black text-black" />
+                  : <Play  className="w-6 h-6 fill-black text-black ml-0.5" />}
+              </button>
+
+              {/* Loop */}
+              <button onClick={handleLoopToggle}
+                className={`p-2.5 rounded-xl active-scale transition-colors ${loop ? 'bg-[#7fa8f5]/20 text-[#7fa8f5]' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
+                title="Loop">
+                <Repeat className="w-4 h-4" />
+              </button>
+
+              {/* Next verse */}
+              <button onClick={() => {
+                  const audio = audioRef.current;
+                  if (!audio || !verses.length) return;
+                  const next = verses.find(v => getVerseStartMs(v) / 1000 > audio.currentTime + 0.1);
+                  if (next) {
+                    const val = getVerseStartMs(next) / 1000;
+                    audio.currentTime = val;
+                    setCurrentTime(val);
+                    if (!isPlaying) {
+                      const ctx = canvasRef.current?.getContext('2d');
+                      if (ctx) drawFrame(ctx, verses, val * 1000);
+                    }
+                  }
+                }}
+                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 active-scale text-white/60"
+                title="Next verse">
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Speed selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-white/35 font-semibold w-10 shrink-0">Speed</span>
+              <div className="flex gap-1.5 flex-1">
+                {SPEEDS.map(s => (
+                  <button key={s} onClick={() => handleSpeedChange(s)}
+                    className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all active-scale ${
+                      speed === s
+                        ? 'bg-[#7fa8f5] text-black'
+                        : 'bg-white/6 text-white/45 hover:bg-white/12'
+                    }`}>
+                    {s}×
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Verse info */}
-            <div className="bg-surface rounded-2xl p-4 border border-border">
-              <div className="flex items-center gap-2 text-xs font-bold text-fg mb-2">
-                <Type className="w-4 h-4 text-accent" />
-                Content
-              </div>
-              <p className="text-xs text-fg-muted">
-                {verses.length} verses · Word-by-word highlighting via Quran.com timing segments ·
-                <span className="text-accent font-semibold"> {CANVAS_W}×{CANVAS_H}px</span> (9:16 portrait)
-              </p>
-            </div>
-
-            {/* Action buttons */}
-            <div className="space-y-3">
-              <button
-                onClick={handlePreview}
-                className={`w-full py-3.5 px-5 rounded-2xl font-bold text-sm flex items-center justify-center gap-3 active-scale border transition-all ${
-                  previewing
-                    ? 'bg-surface-2 border-accent text-accent'
-                    : 'bg-surface border-border text-fg hover:bg-surface-2'
-                }`}
-              >
-                {previewing ? (
-                  <><Pause className="w-5 h-5" /><span>Stop Preview</span></>
-                ) : (
-                  <><Play className="w-5 h-5" /><span>Preview in App</span></>
-                )}
-              </button>
-
-              <button
-                onClick={handleRecord}
-                disabled={recording || !firstLocalUrl}
-                className="w-full py-3.5 px-5 rounded-2xl bg-accent hover:bg-accent-hover text-slate-950 font-bold text-sm flex items-center justify-center gap-3 shadow-xl active-scale disabled:opacity-60 transition-all"
-              >
-                {recording ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /><span>Recording...</span></>
-                ) : recorded ? (
-                  <><CheckCircle2 className="w-5 h-5" /><span>Exported! Record Again?</span></>
-                ) : (
-                  <><Video className="w-5 h-5" /><span>Export Video (.webm)</span></>
-                )}
-              </button>
-
-              {!firstLocalUrl && (
-                <p className="text-center text-xs text-amber-400">
-                  ⚠️ No local audio found. Download the ayahs first from the Confirm screen.
-                </p>
-              )}
-
-              <p className="text-center text-[11px] text-fg-muted leading-relaxed">
-                The exported video includes word-by-word Arabic highlighting
-                synced to real Quran.com timing segments. Saved as <span className="font-mono text-accent">.webm</span> — shareable on social media.
-              </p>
-
-              {recorded && (
-                <button
-                  onClick={() => { setRecorded(false); showToast('info', 'Ready for another recording.'); }}
-                  className="w-full py-3 px-4 rounded-xl bg-surface-2 border border-border text-fg-muted font-semibold text-xs flex items-center justify-center gap-2 active-scale"
-                >
-                  <Download className="w-4 h-4" />
-                  Record Another
-                </button>
-              )}
-            </div>
-          </>
-        )}
-
-        {!loading && verses.length === 0 && !error && (
-          <div className="text-center py-10 bg-surface/40 rounded-2xl border border-border/60">
-            <p className="text-sm font-semibold text-fg mb-1">No verse data available</p>
-            <p className="text-xs text-fg-muted">Make sure you have a network connection.</p>
           </div>
         )}
+
+        {/* ── Screen record tip ────────────────────────────────────────────── */}
+        {showTip && (
+          <div className="rounded-2xl border border-white/6 bg-white/2 p-4 relative">
+            <button onClick={() => setShowTip(false)}
+              className="absolute top-3 right-3 text-white/25 hover:text-white/60 text-xs">✕</button>
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-[#7fa8f5]/12 shrink-0">
+                <Smartphone className="w-5 h-5 text-[#7fa8f5]" />
+              </div>
+              <div className="space-y-2 min-w-0">
+                <p className="text-xs font-bold text-white/80">Record with Android Screen Recorder</p>
+                <div className="space-y-1.5 text-[11px] text-white/40">
+                  <div className="flex items-center gap-2">
+                    <ScreenShare className="w-3.5 h-3.5 shrink-0 text-[#7fa8f5]" />
+                    Swipe down → tap <span className="text-white/65 font-semibold ml-0.5">Screen Record</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Play className="w-3.5 h-3.5 shrink-0 text-[#7fa8f5]" />
+                    Press Play, then stop recording when done
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 shrink-0 text-[#7fa8f5]" />
+                    Video auto-saves to your Gallery
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Verse count ──────────────────────────────────────────────────── */}
+        {!loading && verses.length > 0 && (
+          <p className="text-center text-[11px] text-white/25 pb-2">
+            {verses.length} verse{verses.length !== 1 ? 's' : ''} · word-by-word timing via Quran.com
+          </p>
+        )}
+
       </main>
     </div>
   );

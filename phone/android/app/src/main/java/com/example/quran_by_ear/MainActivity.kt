@@ -39,6 +39,16 @@ class MainActivity : ComponentActivity() {
     LocalBroadcastManager.getInstance(this).registerReceiver(
       mediaActionReceiver, IntentFilter("MEDIA_ACTION")
     )
+    
+    onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+        override fun handleOnBackPressed() {
+            if (mainWebView?.canGoBack() == true) {
+                mainWebView?.goBack()
+            } else {
+                finish()
+            }
+        }
+    })
 
     enableEdgeToEdge()
     setContent {

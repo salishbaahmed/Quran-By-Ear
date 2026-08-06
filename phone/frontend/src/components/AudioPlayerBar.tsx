@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, X, Disc, RotateCcw, RotateCw, Repeat, FastForward, Timer, SkipForward, SkipBack } from 'lucide-react';
+import { Play, Pause, X, Disc, RotateCcw, RotateCw, Repeat, FastForward, Timer } from 'lucide-react';
 import { CurrentlyPlaying } from '../types';
 import { updateStats, recordPlayStart } from '../lib/androidBridge';
+import { logPlayEvent } from '../lib/supabase';
 
 interface AudioPlayerBarProps {
   currentPlaying: CurrentlyPlaying | null;
@@ -30,11 +31,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
   const [showSleepMenu, setShowSleepMenu] = useState(false);
   const [sleepMinutes, setSleepMinutes] = useState(0);
   const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
-
-  // Playlist mode
-  const [playlistIndex, setPlaylistIndex] = useState(0);
-  const playlistIndexRef = useRef(0);
-  const isLoopingRef = useRef(false);
 
   // Refs for stats tracking
   const lastReportedTimeRef = useRef<number>(0);
@@ -84,28 +80,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
     }, 1000);
   }, [clearSleepTimer, reportDeltaTime]);
 
-  // ── Load track by index (for playlist mode) ──
-  const loadTrackAtIndex = useCallback((idx: number) => {
-    const playlist = currentPlaying?.playlist;
-    if (!playlist || idx < 0 || idx >= playlist.length) return;
-    const track = playlist[idx];
-
-    playlistIndexRef.current = idx;
-    setPlaylistIndex(idx);
-    lastReportedTimeRef.current = 0;
-    playStartRecordedRef.current = false;
-    currentFilenameRef.current = track.verseKey;
-    setCurrentTime(0);
-    setDuration(0);
-
-    if (audioRef.current) {
-      audioRef.current.src = track.url;
-      audioRef.current.loop = false; // Loop is managed at playlist level
-      audioRef.current.playbackRate = speed;
-      audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-    }
-  }, [currentPlaying?.playlist, speed]);
-
   // ── Handle track / session changes ──
   useEffect(() => {
     if (!currentPlaying) {
@@ -120,26 +94,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
       return;
     }
 
-    // Reset playlist index when the item changes
-    playlistIndexRef.current = 0;
-    setPlaylistIndex(0);
     lastReportedTimeRef.current = 0;
     playStartRecordedRef.current = false;
     setCurrentTime(0);
     setDuration(0);
 
-    if (currentPlaying.playlist && currentPlaying.playlist.length > 0) {
-      // Playlist mode
-      const firstTrack = currentPlaying.playlist[0];
-      currentFilenameRef.current = firstTrack.verseKey;
-      if (audioRef.current) {
-        audioRef.current.src = firstTrack.url;
-        audioRef.current.loop = false;
-        audioRef.current.playbackRate = speed;
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-      }
-    } else if (currentPlaying.url) {
-      // Single-track mode (backward compat)
+    if (currentPlaying.url) {
       currentFilenameRef.current = currentPlaying.filename ?? null;
       if (audioRef.current) {
         audioRef.current.src = currentPlaying.url;
@@ -149,16 +109,14 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPlaying?.url, currentPlaying?.playlist]);
+  }, [currentPlaying?.url]);
 
-  // ── Sync loop ref & speed ──
+  // ── Sync loop & speed ──
   useEffect(() => {
-    isLoopingRef.current = isLooping;
-    // In single-track mode, set loop on the element directly
-    if (audioRef.current && !currentPlaying?.playlist) {
+    if (audioRef.current) {
       audioRef.current.loop = isLooping;
     }
-  }, [isLooping, currentPlaying?.playlist]);
+  }, [isLooping]);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = speed;
@@ -170,7 +128,7 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
       if (audioRef.current) reportDeltaTime(audioRef.current.currentTime, true);
       clearSleepTimer();
     };
-  }, []);
+  }, [reportDeltaTime, clearSleepTimer]);
 
   if (!currentPlaying) return null;
 
@@ -214,24 +172,8 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
     if (audioRef.current) reportDeltaTime(audioRef.current.currentTime, true);
     lastReportedTimeRef.current = 0;
     playStartRecordedRef.current = false;
-
-    const playlist = currentPlaying?.playlist;
-    if (playlist && playlist.length > 0) {
-      const currentIdx = playlistIndexRef.current;
-      const nextIdx = currentIdx + 1;
-      if (nextIdx < playlist.length) {
-        // Advance to next track
-        loadTrackAtIndex(nextIdx);
-      } else if (isLoopingRef.current) {
-        // Loop back to first track
-        loadTrackAtIndex(0);
-      } else {
-        setIsPlaying(false);
-      }
-    } else {
-      // Single-track mode
-      if (!isLooping) setIsPlaying(false);
-    }
+    
+    if (!isLooping) setIsPlaying(false);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -281,6 +223,12 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
           setIsPlaying(true);
           if (!playStartRecordedRef.current && currentFilenameRef.current) {
             recordPlayStart(currentFilenameRef.current);
+            logPlayEvent(
+              currentPlaying.surahNum || 0,
+              currentPlaying.startAyah || 0,
+              currentPlaying.recitationId || 0,
+              currentFilenameRef.current
+            );
             playStartRecordedRef.current = true;
           }
         }}
@@ -296,11 +244,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
             <p className="text-xs font-semibold text-fg truncate">{currentPlaying.title}</p>
             <div className="flex items-center gap-1.5">
               <p className="text-[10px] text-fg-muted truncate">{currentPlaying.subtitle}</p>
-              {currentPlaying.playlist && currentPlaying.playlist.length > 1 && (
-                <span className="text-[9px] font-bold text-accent bg-accent-light px-1.5 py-0.5 rounded-md border border-accent/20 shrink-0">
-                  {playlistIndex + 1}/{currentPlaying.playlist.length}
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -379,18 +322,8 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
           </div>
         </div>
 
-        {/* Center: Prev / Skip / Play / Skip / Next */}
+        {/* Center: Skip Back / Play / Skip Forward */}
         <div className="flex items-center gap-1.5">
-          {currentPlaying.playlist && currentPlaying.playlist.length > 1 && (
-            <button
-              onClick={() => loadTrackAtIndex(Math.max(0, playlistIndexRef.current - 1))}
-              disabled={playlistIndex === 0}
-              className="p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 active-scale disabled:opacity-30"
-              title="Previous ayah"
-            >
-              <SkipBack className="w-4 h-4" />
-            </button>
-          )}
           <button onClick={() => skipSeconds(-5)} className="p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 active-scale" title="Rewind 5s">
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
@@ -404,16 +337,6 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
           <button onClick={() => skipSeconds(5)} className="p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 active-scale" title="Forward 5s">
             <RotateCw className="w-3.5 h-3.5" />
           </button>
-          {currentPlaying.playlist && currentPlaying.playlist.length > 1 && (
-            <button
-              onClick={() => loadTrackAtIndex(Math.min(currentPlaying.playlist!.length - 1, playlistIndexRef.current + 1))}
-              disabled={playlistIndex >= (currentPlaying.playlist?.length ?? 1) - 1}
-              className="p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-surface-2 active-scale disabled:opacity-30"
-              title="Next ayah"
-            >
-              <SkipForward className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
         {/* Right: Sleep timer */}
@@ -449,3 +372,4 @@ export const AudioPlayerBar: React.FC<AudioPlayerBarProps> = ({ currentPlaying, 
     </div>
   );
 };
+

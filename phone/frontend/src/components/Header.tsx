@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Library, Settings } from 'lucide-react';
+import { ArrowLeft, Library, Info } from 'lucide-react';
 import { ScreenState } from '../types';
 
 interface HeaderProps {
@@ -57,10 +57,10 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             onClick={() => onNavigate('settings')}
             className="p-2 rounded-xl bg-surface-2/60 hover:bg-surface-2 text-fg active-scale border border-border/50"
-            title="Settings"
-            aria-label="Settings"
+            title="About"
+            aria-label="About"
           >
-            <Settings className="w-5 h-5 text-fg-muted" />
+            <Info className="w-5 h-5 text-fg-muted" />
           </button>
         </div>
       )}

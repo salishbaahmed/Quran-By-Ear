@@ -7,6 +7,8 @@ declare global {
     AndroidBridge?: {
       /** Enqueue a download via Android DownloadManager. filename = relative path e.g. "7/1/003.mp3" */
       downloadAudio(url: string, filename: string): void;
+      /** Download multiple MP3 URLs and concatenate into a single file. */
+      downloadAndConcatenateAudio(urlsJson: string, filename: string): void;
       /** Returns JSON array of relative paths for all downloaded files (recursive scan) */
       getDownloadedFiles(): string;
       /** Returns the file:// absolute URI for a relative path */
@@ -17,6 +19,7 @@ declare global {
       updateStats(filename: string, timeListenedSeconds: number): void;
       getAllStats(): string;
       deleteFile(relativePath: string): void;
+      readTextFile(fileUrl: string): string;
     };
   }
 }
@@ -35,6 +38,30 @@ if (typeof window !== 'undefined' && !isNativeBridgeAvailable()) {
 }
 
 // ── Download ──────────────────────────────────────────────────────────────────
+
+/**
+ * Download multiple MP3 URLs and concatenate into a single file.
+ */
+export function downloadAndConcatenateAudio(urls: string[], filename: string): void {
+  if (isNativeBridgeAvailable()) {
+    window.AndroidBridge!.downloadAndConcatenateAudio(JSON.stringify(urls), filename);
+  } else {
+    console.log('[Dev Mock] downloadAndConcatenateAudio:', { urls, filename });
+    setTimeout(() => {
+      try {
+        const stored = localStorage.getItem(MOCK_FILES_KEY);
+        const files: string[] = stored ? JSON.parse(stored) : [];
+        if (!files.includes(filename)) {
+          files.push(filename);
+          localStorage.setItem(MOCK_FILES_KEY, JSON.stringify(files));
+          console.log('[Dev Mock] File added:', filename);
+        }
+      } catch (err) {
+        console.error('[Dev Mock] Error saving file:', err);
+      }
+    }, 1500);
+  }
+}
 
 /**
  * Download a single ayah file.
@@ -81,6 +108,16 @@ export function deleteAudio(relativePath: string): void {
 }
 
 // ── Query ─────────────────────────────────────────────────────────────────────
+
+export function readTextFile(fileUrl: string): string {
+  if (isNativeBridgeAvailable()) {
+    return window.AndroidBridge!.readTextFile(fileUrl);
+  } else {
+    console.log('[Dev Mock] readTextFile:', fileUrl);
+    // Dev mock might not support real file reading easily.
+    return "";
+  }
+}
 
 export function getDownloadedFiles(): string[] {
   if (isNativeBridgeAvailable()) {

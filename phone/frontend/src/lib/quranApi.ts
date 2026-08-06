@@ -67,12 +67,13 @@ export async function fetchVerseAudioUrls(
   surahNum: number,
   startAyah: number,
   endAyah: number,
+  includeBismillah: boolean = true
 ): Promise<VerseAudio[]> {
   const data = await apiGet<{ audio_files: Array<{ verse_key: string; url: string }> }>(
-    `/recitations/${recitationId}/by_chapter/${surahNum}`
+    `/recitations/${recitationId}/by_chapter/${surahNum}?per_page=300`
   );
 
-  return (data.audio_files ?? [])
+  const results = (data.audio_files ?? [])
     .map((f) => {
       const { surahNum: sn, ayahNum } = parseVerseKey(f.verse_key);
       return {
@@ -83,6 +84,28 @@ export async function fetchVerseAudioUrls(
       };
     })
     .filter((v) => v.ayahNum >= startAyah && v.ayahNum <= endAyah);
+
+  const isSurah1Ayah1 = surahNum === 1 && startAyah === 1;
+  if (includeBismillah && surahNum !== 9 && !isSurah1Ayah1) {
+    try {
+      const bismillahData = await apiGet<{ audio_files: Array<{ verse_key: string; url: string }> }>(
+        `/recitations/${recitationId}/by_chapter/1`
+      );
+      const bismillahFile = bismillahData.audio_files?.find(f => f.verse_key === '1:1');
+      if (bismillahFile) {
+        results.unshift({
+          verse_key: '1:1',
+          surahNum: 1,
+          ayahNum: 1,
+          url: VERSE_AUDIO_CDN + bismillahFile.url,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to fetch Bismillah audio", e);
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -94,36 +117,58 @@ export async function fetchVerseTimingsAndText(
   surahNum: number,
   startAyah: number,
   endAyah: number,
+  includeBismillah: boolean = true
 ): Promise<VerseData[]> {
-  const total = endAyah - startAyah + 1;
-  // Quran.com API paginates at 50 per page — handle large surahs
-  const perPage = 50;
-  const pages = Math.ceil(total / perPage);
   const allVerses: VerseData[] = [];
+  
+  const data = await apiGet<{
+    verses: Array<{
+      verse_key: string;
+      text_uthmani: string;
+      audio?: { url: string; segments: TimingSegment[] };
+    }>;
+  }>(
+    `/verses/by_chapter/${surahNum}?audio=${recitationId}&fields=text_uthmani,verse_key&per_page=300`
+  );
 
-  for (let page = 1; page <= pages; page++) {
-    const offset = startAyah - 1 + (page - 1) * perPage;
-    const data = await apiGet<{
-      verses: Array<{
-        verse_key: string;
-        text_uthmani: string;
-        audio?: { url: string; segments: TimingSegment[] };
-      }>;
-    }>(
-      `/verses/by_chapter/${surahNum}?audio=${recitationId}&fields=text_uthmani,verse_key&per_page=${perPage}&offset=${offset}`
-    );
+  for (const v of data.verses ?? []) {
+    const { ayahNum } = parseVerseKey(v.verse_key);
+    if (ayahNum < startAyah || ayahNum > endAyah) continue;
+    allVerses.push({
+      verse_key: v.verse_key,
+      surahNum,
+      ayahNum,
+      text_uthmani: v.text_uthmani,
+      audioUrl: v.audio ? VERSE_AUDIO_CDN + v.audio.url : '',
+      segments: v.audio?.segments ?? [],
+    });
+  }
 
-    for (const v of data.verses ?? []) {
-      const { ayahNum } = parseVerseKey(v.verse_key);
-      if (ayahNum < startAyah || ayahNum > endAyah) continue;
-      allVerses.push({
-        verse_key: v.verse_key,
-        surahNum,
-        ayahNum,
-        text_uthmani: v.text_uthmani,
-        audioUrl: v.audio ? VERSE_AUDIO_CDN + v.audio.url : '',
-        segments: v.audio?.segments ?? [],
-      });
+  const isSurah1Ayah1 = surahNum === 1 && startAyah === 1;
+  if (includeBismillah && surahNum !== 9 && !isSurah1Ayah1) {
+    try {
+      const bismillahData = await apiGet<{
+        verses: Array<{
+          verse_key: string;
+          text_uthmani: string;
+          audio?: { url: string; segments: TimingSegment[] };
+        }>;
+      }>(
+        `/verses/by_chapter/1?audio=${recitationId}&fields=text_uthmani,verse_key&per_page=1&offset=0`
+      );
+      const bismillahVerse = bismillahData.verses?.[0];
+      if (bismillahVerse && bismillahVerse.verse_key === '1:1') {
+        allVerses.unshift({
+          verse_key: '1:1',
+          surahNum: 1,
+          ayahNum: 1,
+          text_uthmani: bismillahVerse.text_uthmani,
+          audioUrl: bismillahVerse.audio ? VERSE_AUDIO_CDN + bismillahVerse.audio.url : '',
+          segments: bismillahVerse.audio?.segments ?? [],
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to fetch Bismillah timings", e);
     }
   }
 
@@ -131,27 +176,43 @@ export async function fetchVerseTimingsAndText(
 }
 
 /**
- * Build the filename for a downloaded ayah.
- * Format: {recitationId}/{surahNum}/{ayahNum_padded3}.mp3
- * Example: 7/1/003.mp3
+ * Build the filename for a downloaded group (concatenated ayahs).
+ * Format: {recitationId}/{surahNum}/{startAyah}-{endAyah}.mp3
+ * Example: 7/1/1-7.mp3
  */
-export function buildAyahFilename(recitationId: number, surahNum: number, ayahNum: number): string {
-  const ayahPadded = String(ayahNum).padStart(3, '0');
-  return `${recitationId}/${surahNum}/${ayahPadded}.mp3`;
+export function buildGroupFilename(recitationId: number, surahNum: number, startAyah: number, endAyah: number, includeBismillah: boolean = true): string {
+  const isSurah1Ayah1 = surahNum === 1 && startAyah === 1;
+  const suffix = (!includeBismillah && surahNum !== 9 && !isSurah1Ayah1) ? '_nobism' : '';
+  return `${recitationId}/${surahNum}/${startAyah}-${endAyah}${suffix}.mp3`;
 }
 
 /**
  * Parse a stored relative filename back to its components.
- * Handles both new format "7/1/003.mp3" and old legacy format gracefully.
+ * Handles single ayahs (003.mp3) and grouped ranges (1-7.mp3).
  */
-export function parseAyahFilename(filename: string): {
+export function parseDownloadedFilename(filename: string): {
   recitationId: number;
   surahNum: number;
-  ayahNum: number;
+  startAyah?: number;
+  endAyah?: number;
+  ayahNum?: number;
 } | null {
   const parts = filename.replace('.mp3', '').split('/');
   if (parts.length !== 3) return null;
-  const [r, s, a] = parts.map(Number);
-  if (isNaN(r) || isNaN(s) || isNaN(a)) return null;
-  return { recitationId: r, surahNum: s, ayahNum: a };
+  const [r, s, a] = parts;
+  const recId = Number(r);
+  const surId = Number(s);
+  if (isNaN(recId) || isNaN(surId)) return null;
+
+  const aClean = a.replace('_nobism', '');
+
+  if (aClean.includes('-')) {
+    const [st, en] = aClean.split('-').map(Number);
+    if (isNaN(st) || isNaN(en)) return null;
+    return { recitationId: recId, surahNum: surId, startAyah: st, endAyah: en };
+  } else {
+    const ayId = Number(aClean);
+    if (isNaN(ayId)) return null;
+    return { recitationId: recId, surahNum: surId, ayahNum: ayId };
+  }
 }

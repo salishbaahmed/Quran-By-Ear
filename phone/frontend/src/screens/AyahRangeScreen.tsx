@@ -16,13 +16,13 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
   onNavigate,
   onSelectRange,
 }) => {
-  const [startAyah, setStartAyah] = useState<number>(1);
-  const [endAyah, setEndAyah] = useState<number>(7);
+  const [startInput, setStartInput] = useState<string>('1');
+  const [endInput, setEndInput] = useState<string>('7');
 
   useEffect(() => {
     if (surah) {
-      setStartAyah(1);
-      setEndAyah(surah.totalAyahs);
+      setStartInput('1');
+      setEndInput(surah.totalAyahs.toString());
     }
   }, [surah]);
 
@@ -32,17 +32,28 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
   }
 
   const maxAyahs = surah.totalAyahs;
-  const selectedCount = endAyah - startAyah + 1;
+  const startAyah = parseInt(startInput, 10) || 1;
+  const endAyah = parseInt(endInput, 10) || maxAyahs;
+  const selectedCount = Math.max(0, endAyah - startAyah + 1);
 
-  const handleStartChange = (val: number) => {
+  const handleStartChangeBtn = (val: number) => {
     const clamped = Math.max(1, Math.min(val, maxAyahs));
-    setStartAyah(clamped);
-    if (clamped > endAyah) setEndAyah(clamped);
+    setStartInput(clamped.toString());
+    if (clamped > endAyah) setEndInput(clamped.toString());
   };
 
-  const handleEndChange = (val: number) => {
+  const handleEndChangeBtn = (val: number) => {
     const clamped = Math.max(startAyah, Math.min(val, maxAyahs));
-    setEndAyah(clamped);
+    setEndInput(clamped.toString());
+  };
+
+  const handleBlur = () => {
+    let s = parseInt(startInput, 10) || 1;
+    let e = parseInt(endInput, 10) || maxAyahs;
+    s = Math.max(1, Math.min(s, maxAyahs));
+    e = Math.max(s, Math.min(e, maxAyahs));
+    setStartInput(s.toString());
+    setEndInput(e.toString());
   };
 
   const isValid = startAyah >= 1 && startAyah <= endAyah && endAyah <= maxAyahs;
@@ -106,7 +117,7 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
             </label>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => handleStartChange(startAyah - 1)}
+                onClick={() => handleStartChangeBtn(startAyah - 1)}
                 disabled={startAyah <= 1}
                 className="w-12 h-12 rounded-xl bg-surface-2 hover:bg-surface-2/80 disabled:opacity-30 flex items-center justify-center text-fg font-bold active-scale border border-border"
               >
@@ -114,14 +125,13 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
               </button>
               <input
                 type="number"
-                min="1"
-                max={maxAyahs}
-                value={startAyah}
-                onChange={(e) => handleStartChange(parseInt(e.target.value, 10) || 1)}
+                value={startInput}
+                onChange={(e) => setStartInput(e.target.value)}
+                onBlur={handleBlur}
                 className="flex-1 text-center py-2.5 bg-surface-2 border border-border rounded-xl text-fg font-bold text-lg focus:outline-none focus:border-accent"
               />
               <button
-                onClick={() => handleStartChange(startAyah + 1)}
+                onClick={() => handleStartChangeBtn(startAyah + 1)}
                 disabled={startAyah >= maxAyahs}
                 className="w-12 h-12 rounded-xl bg-surface-2 hover:bg-surface-2/80 disabled:opacity-30 flex items-center justify-center text-fg font-bold active-scale border border-border"
               >
@@ -137,7 +147,7 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
             </label>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => handleEndChange(endAyah - 1)}
+                onClick={() => handleEndChangeBtn(endAyah - 1)}
                 disabled={endAyah <= startAyah}
                 className="w-12 h-12 rounded-xl bg-surface-2 hover:bg-surface-2/80 disabled:opacity-30 flex items-center justify-center text-fg font-bold active-scale border border-border"
               >
@@ -145,14 +155,13 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
               </button>
               <input
                 type="number"
-                min={startAyah}
-                max={maxAyahs}
-                value={endAyah}
-                onChange={(e) => handleEndChange(parseInt(e.target.value, 10) || startAyah)}
+                value={endInput}
+                onChange={(e) => setEndInput(e.target.value)}
+                onBlur={handleBlur}
                 className="flex-1 text-center py-2.5 bg-surface-2 border border-border rounded-xl text-fg font-bold text-lg focus:outline-none focus:border-accent"
               />
               <button
-                onClick={() => handleEndChange(endAyah + 1)}
+                onClick={() => handleEndChangeBtn(endAyah + 1)}
                 disabled={endAyah >= maxAyahs}
                 className="w-12 h-12 rounded-xl bg-surface-2 hover:bg-surface-2/80 disabled:opacity-30 flex items-center justify-center text-fg font-bold active-scale border border-border"
               >
@@ -166,19 +175,19 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
             <span className="text-[11px] font-semibold text-fg-muted block mb-2">Quick Shortcuts</span>
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={() => { setStartAyah(1); setEndAyah(maxAyahs); }}
+                onClick={() => { setStartInput('1'); setEndInput(maxAyahs.toString()); }}
                 className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
               >
                 Full Surah (1–{maxAyahs})
               </button>
               <button
-                onClick={() => { setStartAyah(1); setEndAyah(Math.min(10, maxAyahs)); }}
+                onClick={() => { setStartInput('1'); setEndInput(Math.min(10, maxAyahs).toString()); }}
                 className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
               >
                 First 10 Ayahs
               </button>
               <button
-                onClick={() => { setStartAyah(1); setEndAyah(Math.min(5, maxAyahs)); }}
+                onClick={() => { setStartInput('1'); setEndInput(Math.min(5, maxAyahs).toString()); }}
                 className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
               >
                 First 5 Ayahs
@@ -186,8 +195,8 @@ export const AyahRangeScreen: React.FC<AyahRangeScreenProps> = ({
               <button
                 onClick={() => {
                   const half = Math.ceil(maxAyahs / 2);
-                  setStartAyah(1);
-                  setEndAyah(half);
+                  setStartInput('1');
+                  setEndInput(half.toString());
                 }}
                 className="py-2 px-3 rounded-xl bg-surface-2 hover:bg-surface-2/80 text-xs font-semibold text-fg border border-border active-scale"
               >

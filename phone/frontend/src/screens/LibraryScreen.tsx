@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ScreenState, DownloadGroup, CurrentlyPlaying, PlaylistTrack, Surah } from '../types';
+import { ScreenState, DownloadGroup, CurrentlyPlaying, Surah } from '../types';
 import { Header } from '../components/Header';
 import { getDownloadedFiles, getAllStats, getFileUrl, deleteAudio } from '../lib/androidBridge';
-import { parseAyahFilename } from '../lib/quranApi';
+import { parseDownloadedFilename } from '../lib/quranApi';
 import { getSurahByNumber } from '../data/quranData';
 import { Play, Music, Headphones, Clock, RefreshCw, FolderOpen, Trash2, Video, Download } from 'lucide-react';
 
@@ -42,56 +42,39 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   const buildGroups = useCallback(() => {
     setLoading(true);
     try {
-      const files = getDownloadedFiles(); // e.g. ["7/1/001.mp3", "7/1/002.mp3"]
+      const files = getDownloadedFiles(); // e.g. ["7/1/1-10.mp3"]
       const stats = getAllStats();
-
-      // Group by recitationId + surahNum
-      const map = new Map<string, DownloadGroup>();
+      const result: DownloadGroup[] = [];
 
       for (const filename of files) {
-        const parsed = parseAyahFilename(filename);
-        if (!parsed) continue; // ignore legacy files
+        const parsed = parseDownloadedFilename(filename);
+        // Only show valid new format ranged groups (e.g. 1-10.mp3) or fallback single ayahs
+        if (!parsed) continue;
 
-        const key = `${parsed.recitationId}_${parsed.surahNum}`;
+        const startAyah = parsed.startAyah ?? parsed.ayahNum ?? 1;
+        const endAyah = parsed.endAyah ?? parsed.ayahNum ?? 1;
+        const ayahCount = endAyah - startAyah + 1;
+        
         const localUrl = getFileUrl(filename);
         const fileStat = stats.find((s) => s.filename === filename);
+        const surah: Surah | undefined = getSurahByNumber(parsed.surahNum);
 
-        if (!map.has(key)) {
-          const surah: Surah | undefined = getSurahByNumber(parsed.surahNum);
-          map.set(key, {
-            recitationId: parsed.recitationId,
-            reciterName: RECITER_NAMES[parsed.recitationId] ?? `Reciter #${parsed.recitationId}`,
-            surahNum: parsed.surahNum,
-            surah,
-            ayahs: [],
-            totalPlayCount: 0,
-            totalListenTime: 0,
-          });
-        }
-
-        const group = map.get(key)!;
-        group.ayahs.push({
+        result.push({
           filename,
           localUrl,
           recitationId: parsed.recitationId,
+          reciterName: RECITER_NAMES[parsed.recitationId] ?? `Reciter #${parsed.recitationId}`,
           surahNum: parsed.surahNum,
-          ayahNum: parsed.ayahNum,
+          surah,
+          startAyah,
+          endAyah,
+          ayahCount,
           stats: fileStat,
         });
-        if (fileStat) {
-          group.totalPlayCount += fileStat.playCount;
-          group.totalListenTime += fileStat.totalTime;
-        }
       }
 
-      // Sort ayahs within each group
-      const result: DownloadGroup[] = Array.from(map.values()).map((g) => ({
-        ...g,
-        ayahs: g.ayahs.sort((a, b) => a.ayahNum - b.ayahNum),
-      }));
-
-      // Sort groups by surahNum
-      result.sort((a, b) => a.surahNum - b.surahNum || a.recitationId - b.recitationId);
+      // Sort groups by surahNum, then startAyah
+      result.sort((a, b) => a.surahNum - b.surahNum || a.startAyah - b.startAyah);
       setGroups(result);
     } catch (err) {
       console.error('Error building library:', err);
@@ -112,43 +95,31 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
   };
 
   const handlePlayGroup = (group: DownloadGroup) => {
-    if (group.ayahs.length === 0) return;
-    const startAyah = group.ayahs[0].ayahNum;
-    const endAyah = group.ayahs[group.ayahs.length - 1].ayahNum;
-
-    const tracks: PlaylistTrack[] = group.ayahs.map((a) => ({
-      url: a.localUrl,
-      verseKey: `${group.surahNum}:${a.ayahNum}`,
-      ayahNum: a.ayahNum,
-    }));
-
     const surahName = group.surah?.englishName ?? `Surah ${group.surahNum}`;
     onPlayItem({
-      title: `${surahName} (${startAyah}–${endAyah})`,
+      title: `${surahName} (${group.startAyah}–${group.endAyah})`,
       subtitle: group.reciterName,
-      playlist: tracks,
+      url: group.localUrl,
+      filename: group.filename,
       recitationId: group.recitationId,
       surahNum: group.surahNum,
-      startAyah,
-      endAyah,
+      startAyah: group.startAyah,
+      endAyah: group.endAyah,
     });
   };
 
   const handleDeleteGroup = (e: React.MouseEvent, group: DownloadGroup) => {
     e.stopPropagation();
-    // Delete all ayah files in the group
-    for (const ayah of group.ayahs) {
-      deleteAudio(ayah.filename);
-    }
-    if (currentPlaying?.recitationId === group.recitationId && currentPlaying?.surahNum === group.surahNum) {
+    deleteAudio(group.filename);
+    if (currentPlaying?.filename === group.filename) {
       onPlayItem(null);
     }
-    buildGroups();
+    // Artificial delay to allow native file system changes
+    setTimeout(buildGroups, 200);
   };
 
   const isGroupPlaying = (group: DownloadGroup): boolean =>
-    currentPlaying?.recitationId === group.recitationId &&
-    currentPlaying?.surahNum === group.surahNum;
+    currentPlaying?.filename === group.filename;
 
   return (
     <div className="min-h-screen flex flex-col pb-28">
@@ -163,7 +134,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
       <main className="flex-1 px-4 pt-4 max-w-md mx-auto w-full">
         <div className="flex items-center justify-between mb-4">
           <span className="text-xs font-semibold text-fg-muted">
-            {groups.length} {groups.length === 1 ? 'surah' : 'surahs'} saved
+            {groups.length} {groups.length === 1 ? 'file' : 'files'} saved
           </span>
           <button
             onClick={buildGroups}
@@ -199,13 +170,13 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
           <div className="space-y-3">
             {groups.map((group) => {
               const playing = isGroupPlaying(group);
-              const startAyah = group.ayahs[0]?.ayahNum ?? 1;
-              const endAyah = group.ayahs[group.ayahs.length - 1]?.ayahNum ?? 1;
               const surahName = group.surah?.englishName ?? `Surah ${group.surahNum}`;
+              const playCount = group.stats?.playCount ?? 0;
+              const listenTime = group.stats?.totalTime ?? 0;
 
               return (
                 <div
-                  key={`${group.recitationId}_${group.surahNum}`}
+                  key={group.filename}
                   onClick={() => handlePlayGroup(group)}
                   className={`p-4 rounded-2xl border transition-all cursor-pointer active-scale ${
                     playing
@@ -228,7 +199,7 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                         <h3 className="text-sm font-bold text-fg truncate">
                           {surahName}{' '}
                           <span className="text-xs font-semibold text-accent">
-                            ({group.surahNum}:{startAyah}–{endAyah})
+                            ({group.surahNum}:{group.startAyah}–{group.endAyah})
                           </span>
                         </h3>
                         <p className="text-xs text-fg-muted font-medium truncate mt-0.5">
@@ -236,19 +207,19 @@ export const LibraryScreen: React.FC<LibraryScreenProps> = ({
                         </p>
                         <p className="text-[11px] text-fg-muted mt-0.5 flex items-center gap-1">
                           <Download className="w-2.5 h-2.5" />
-                          {group.ayahs.length} {group.ayahs.length === 1 ? 'ayah' : 'ayahs'} offline
+                          {group.ayahCount} {group.ayahCount === 1 ? 'ayah' : 'ayahs'} offline
                         </p>
 
-                        {(group.totalPlayCount > 0 || group.totalListenTime > 0) && (
+                        {(playCount > 0 || listenTime > 0) && (
                           <div className="flex items-center gap-3 text-[11px] font-medium text-fg-muted/90 mt-2 pt-2 border-t border-border/40">
                             <span className="flex items-center gap-1">
                               <Play className="w-3 h-3 text-accent" />
-                              Played {group.totalPlayCount} {group.totalPlayCount === 1 ? 'time' : 'times'}
+                              Played {playCount} {playCount === 1 ? 'time' : 'times'}
                             </span>
                             <span>•</span>
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3 text-accent" />
-                              {formatTime(group.totalListenTime)}
+                              {formatTime(listenTime)}
                             </span>
                           </div>
                         )}

@@ -30,7 +30,87 @@ class AndroidBridge(private val context: Context) {
     // ── Download ──────────────────────────────────────────────────────────────
 
     /**
-     * Enqueue a download via Android DownloadManager.
+     * Download multiple MP3 files and concatenate them into a single file sequentially.
+     * This avoids gapless playback issues on Android WebViews.
+     */
+    @JavascriptInterface
+    fun downloadAndConcatenateAudio(urlsJson: String, filename: String) {
+        Thread {
+            try {
+                val urls = org.json.JSONArray(urlsJson)
+                val destFile = File(downloadDir, filename)
+                destFile.parentFile?.mkdirs()
+
+                val tempFile = File(downloadDir, "$filename.tmp")
+                val durations = org.json.JSONArray()
+                
+                java.io.FileOutputStream(tempFile).use { outStream ->
+                    for (i in 0 until urls.length()) {
+                        val urlStr = urls.getString(i)
+                        val url = java.net.URL(urlStr)
+                        val conn = url.openConnection() as java.net.HttpURLConnection
+                        conn.requestMethod = "GET"
+                        conn.connect()
+
+                        val chunkFile = File(downloadDir, "$filename.chunk$i")
+                        conn.inputStream.use { inStream ->
+                            java.io.FileOutputStream(chunkFile).use { chunkOut ->
+                                val buffer = ByteArray(8192)
+                                var bytesRead: Int
+                                while (inStream.read(buffer).also { bytesRead = it } != -1) {
+                                    chunkOut.write(buffer, 0, bytesRead)
+                                }
+                            }
+                        }
+
+                        val retriever = android.media.MediaMetadataRetriever()
+                        try {
+                            retriever.setDataSource(chunkFile.absolutePath)
+                            val durationStr = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)
+                            durations.put(durationStr?.toLongOrNull() ?: 0L)
+                        } catch (e: Exception) {
+                            durations.put(0L)
+                            e.printStackTrace()
+                        } finally {
+                            retriever.release()
+                        }
+
+                        java.io.FileInputStream(chunkFile).use { chunkIn ->
+                            val buffer = ByteArray(8192)
+                            var bytesRead: Int
+                            while (chunkIn.read(buffer).also { bytesRead = it } != -1) {
+                                outStream.write(buffer, 0, bytesRead)
+                            }
+                        }
+                        chunkFile.delete()
+                    }
+                }
+                
+                val indexFile = File(downloadDir, filename.replace(".mp3", ".json"))
+                indexFile.writeText(durations.toString())
+
+                // Rename temp to final destination
+                if (destFile.exists()) destFile.delete()
+                tempFile.renameTo(destFile)
+
+                // Notify UI (optional)
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                handler.post {
+                    Toast.makeText(context, "Download complete: ${destFile.nameWithoutExtension}", Toast.LENGTH_SHORT).show()
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                val handler = android.os.Handler(android.os.Looper.getMainLooper())
+                handler.post {
+                    Toast.makeText(context, "Download failed: ${e.message}", Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    /**
+     * Enqueue a standard download via Android DownloadManager.
      * @param url      Full CDN URL of the MP3 file
      * @param filename Relative path e.g. "7/1/003.mp3" — subdirectory is created automatically
      */
@@ -107,6 +187,25 @@ class AndroidBridge(private val context: Context) {
         return File(downloadDir, relativePath).exists()
     }
 
+    /**
+     * Reads a text file given an absolute file:// URL and returns its contents.
+     */
+    @JavascriptInterface
+    fun readTextFile(fileUrl: String): String {
+        try {
+            if (fileUrl.startsWith("file://")) {
+                val path = fileUrl.substring(7)
+                val file = File(path)
+                if (file.exists()) {
+                    return file.readText()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return ""
+    }
+
     // ── Delete ────────────────────────────────────────────────────────────────
 
     @JavascriptInterface
@@ -115,6 +214,13 @@ class AndroidBridge(private val context: Context) {
         if (file.exists()) {
             file.delete()
         }
+        
+        // Also delete the associated JSON index file if it exists
+        val jsonFile = File(downloadDir, relativePath.replace(".mp3", ".json"))
+        if (jsonFile.exists()) {
+            jsonFile.delete()
+        }
+
         dbHelper.deleteStats(relativePath)
         // Also try to remove empty parent directories
         file.parentFile?.let { parent ->
