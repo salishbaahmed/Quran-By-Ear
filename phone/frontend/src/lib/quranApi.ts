@@ -97,9 +97,9 @@ export async function fetchVerseAudioUrls(
       });
     } else {
       try {
-        // Fallback to a clean studio Bismillah (AbdulBaset Murattal = ID 2) for all other reciters
+        // Other reciters use their own Bismillah
         const bismillahData = await apiGet<{ audio_files: Array<{ verse_key: string; url: string }> }>(
-          `/recitations/2/by_chapter/1`
+          `/recitations/${recitationId}/by_chapter/1`
         );
         const bismillahFile = bismillahData.audio_files?.find(f => f.verse_key === '1:1');
         if (bismillahFile) {
@@ -158,7 +158,6 @@ export async function fetchVerseTimingsAndText(
   const isSurah1Ayah1 = surahNum === 1 && startAyah === 1;
   if (includeBismillah && surahNum !== 9 && !isSurah1Ayah1) {
     try {
-      const bismillahRecId = recitationId === 3 ? 3 : 2;
       const bismillahData = await apiGet<{
         verses: Array<{
           verse_key: string;
@@ -166,7 +165,7 @@ export async function fetchVerseTimingsAndText(
           audio?: { url: string; segments: TimingSegment[] };
         }>;
       }>(
-        `/verses/by_chapter/1?audio=${bismillahRecId}&fields=text_uthmani,verse_key&per_page=1&offset=0`
+        `/verses/by_chapter/1?audio=${recitationId}&fields=text_uthmani,verse_key&per_page=1&offset=0`
       );
       const bismillahVerse = bismillahData.verses?.[0];
       if (bismillahVerse && bismillahVerse.verse_key === '1:1') {
